@@ -1,0 +1,24 @@
+# Secretes
+.env
+
+# Python bytecode and tooling caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local Python environments and uv state
+.venv/
+venv/
+uv.lock
+
+# Build and distribution artifacts
+build/
+dist/
+*.egg-info/
+
+# Local editor and OS files
+.idea/
+.vscode/
+.DS_Store
