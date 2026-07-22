@@ -78,12 +78,20 @@ Validate the difficult integrations without making package changes to the host.
 - Apply the queue as one apt transaction only after final confirmation, then
   stream the output and reload the local package state on success.
 
+### Explicit purge and cleanup
+
+- Offer root-only preview and purge actions for an installed non-running kernel
+  image; purge targets that image package and its configuration only.
+- Offer a main-browser-only cleanup action with separate counts and purge
+  actions for installed versioned development headers and versioned kernel
+  support packages that have no matching installed image. List the candidates,
+  simulate before an explicitly confirmed `apt-get purge`, and never run
+  autoremove automatically.
+
 ## MVP TODO
 
-Turn the current immediate-action interface into the safe manager described above.
+Complete the remaining safety requirements for the manager.
 
-- Add real `apt-get purge` only when the full program was launched under `sudo`;
-  keep non-root sessions read-only.
 - Interrupt running `apt-get` child processes safely while preserving their
   streamed output and final exit status.
 - Select versioned kernel image packages as the primary targets and include
@@ -94,9 +102,6 @@ Turn the current immediate-action interface into the safe manager described abov
 - Continue to permanently block removal of the running kernel. Display a
   persistent warning when there is no non-running fallback image, and repeat
   the warning before removing the final fallback.
-- After image removal, detect leftover matching headers/modules and offer an
-  explicitly selected, separately simulated cleanup action;
-  never run autoremove automatically.
 
 ## Future improvements
 

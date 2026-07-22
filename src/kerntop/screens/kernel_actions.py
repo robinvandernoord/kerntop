@@ -40,6 +40,8 @@ class KernelActionsScreen(ModalScreen[KernelAction | None]):
             self.actions = (
                 KernelAction("Preview removal", PreviewAction.REMOVE, False),
                 KernelAction("Remove", PreviewAction.REMOVE, True),
+                KernelAction("Preview purge", PreviewAction.PURGE, False),
+                KernelAction("Purge", PreviewAction.PURGE, True),
                 KernelAction("Queue removal", PreviewAction.REMOVE, False, True),
             )
         else:
@@ -58,6 +60,12 @@ class KernelActionsScreen(ModalScreen[KernelAction | None]):
             details += "\n\nRun kerntop with sudo to enable package actions."
         elif self.record.running:
             details += "\n\nThe running kernel cannot be removed."
+        elif self.record.installed:
+            details += (
+                "\n\nRemove keeps this package's configuration."
+                "\nPurge also removes that configuration."
+                "\nHeaders and kernel support packages are managed separately.\n"
+            )
         with Container(id="action-dialog"):
             yield Static("Kernel actions", id="dialog-title")
             yield Static(details)

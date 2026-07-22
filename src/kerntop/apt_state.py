@@ -10,6 +10,7 @@ from .apt_compat import import_apt_modules
 from .kernels import (
     HEADER_PREFIX,
     IMAGE_PREFIX,
+    KERNEL_SUPPORT_PREFIXES,
     KernelRecord,
     PackageState,
     kernel_records,
@@ -30,7 +31,9 @@ def package_states(cache: t.Iterable[t.Any]) -> tuple[PackageState, ...]:
     """Convert an apt cache to the small, testable package representation."""
     states = []
     for package in cache:
-        if not package.name.startswith((IMAGE_PREFIX, HEADER_PREFIX)):
+        if not package.name.startswith(
+            (IMAGE_PREFIX, HEADER_PREFIX, *KERNEL_SUPPORT_PREFIXES)
+        ):
             continue
         installed = package.installed
         candidate = package.candidate

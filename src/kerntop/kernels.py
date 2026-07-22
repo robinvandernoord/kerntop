@@ -6,6 +6,12 @@ from dataclasses import dataclass
 
 IMAGE_PREFIX = "linux-image-"
 HEADER_PREFIX = "linux-headers-"
+KERNEL_SUPPORT_PREFIXES = (
+    "linux-modules-extra-",
+    "linux-modules-",
+    "linux-tools-",
+    "linux-buildinfo-",
+)
 RELEASE_FLAVOUR_PATTERN = re.compile(r"^\d+(?:\.\d+)+(.*)$")
 SERIES_PATTERN = re.compile(r"^(\d+\.\d+)")
 
@@ -116,6 +122,72 @@ def matching_headers(
         return ()
     prefix = f"{HEADER_PREFIX}{identifier}"
     return tuple(package for package in packages if package.name.startswith(prefix))
+
+
+def unused_headers(
+    packages: t.Iterable[PackageState], native_architecture: str
+) -> tuple[PackageState, ...]:
+    """Return installed versioned headers without an installed matching image."""
+    native_packages = tuple(
+        package for package in packages if package.architecture == native_architecture
+    )
+    installed_images = tuple(
+        identifier
+        for package in native_packages
+        if package.installed
+        and (identifier := kernel_identifier(package.name)) is not None
+    )
+    unused = []
+    for package in native_packages:
+        identifier = package.name.removeprefix(HEADER_PREFIX)
+        if not package.installed or not identifier[:1].isdigit():
+            continue
+        if any(
+            image_identifier.startswith(identifier)
+            or identifier.startswith(image_identifier)
+            for image_identifier in installed_images
+        ):
+            continue
+        unused.append(package)
+    return tuple(sorted(unused, key=lambda package: package.name, reverse=True))
+
+
+def unused_kernel_support_packages(
+    packages: t.Iterable[PackageState], native_architecture: str
+) -> tuple[PackageState, ...]:
+    """Return versioned kernel support packages without an installed image."""
+    native_packages = tuple(
+        package for package in packages if package.architecture == native_architecture
+    )
+    installed_images = tuple(
+        identifier
+        for package in native_packages
+        if package.installed
+        and (identifier := kernel_identifier(package.name)) is not None
+    )
+    unused = []
+    for package in native_packages:
+        prefix = next(
+            (
+                prefix
+                for prefix in KERNEL_SUPPORT_PREFIXES
+                if package.name.startswith(prefix)
+            ),
+            None,
+        )
+        if prefix is None or not package.installed:
+            continue
+        identifier = package.name.removeprefix(prefix)
+        if not identifier[:1].isdigit():
+            continue
+        if any(
+            image_identifier.startswith(identifier)
+            or identifier.startswith(image_identifier)
+            for image_identifier in installed_images
+        ):
+            continue
+        unused.append(package)
+    return tuple(sorted(unused, key=lambda package: package.name, reverse=True))
 
 
 def kernel_records(

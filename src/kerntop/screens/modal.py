@@ -40,6 +40,8 @@ class PreviewOutputScreen(ModalScreen[None]):
         super().__init__()
         self.dialog_title = title
         self.on_finished = on_finished
+        self.pending_output: list[str] = []
+        self.pending_return_code: int | None = None
 
     def compose(self) -> ComposeResult:
         with Container(id="text-dialog"):
@@ -49,14 +51,29 @@ class PreviewOutputScreen(ModalScreen[None]):
             yield Static("Esc or q closes this view.", id="dialog-help")
 
     def write_output(self, line: str) -> None:
+        if not self.is_mounted:
+            self.pending_output.append(line)
+            return
         self.query_one("#apt-output", Log).write_line(line)
 
     def finish(self, return_code: int) -> None:
+        if not self.is_mounted:
+            self.pending_return_code = return_code
+            return
         status = self.query_one("#apt-status", Static)
         status.update(f"apt-get finished with exit status {return_code}.")
         status.add_class("success" if return_code == 0 else "failure")
         if self.on_finished is not None:
             self.on_finished(return_code)
+
+    def on_mount(self) -> None:
+        for line in self.pending_output:
+            self.query_one("#apt-output", Log).write_line(line)
+        self.pending_output = []
+        if self.pending_return_code is not None:
+            return_code = self.pending_return_code
+            self.pending_return_code = None
+            self.finish(return_code)
 
     def action_close(self) -> None:
         self.dismiss()

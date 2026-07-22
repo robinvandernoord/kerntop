@@ -12,8 +12,10 @@ from .apt_commands import (
     PreviewAction,
     QueuedAction,
     apply_command,
+    header_purge_command,
     preview_command,
     stream_command,
+    support_package_purge_command,
     transaction_command,
 )
 from .apt_compat import AptUnavailableError
@@ -24,7 +26,10 @@ from .kernels import (
     PackageState,
     kernel_records,
     kernel_series,
+    unused_headers,
+    unused_kernel_support_packages,
 )
+from .screens.header_cleanup import HeaderCleanupScreen, HeaderPurgeConfirmationScreen
 from .screens.kernel_actions import (
     ApplyConfirmationScreen,
     KernelAction,
@@ -84,6 +89,7 @@ class KerntopApp(App[None]):
         ("i", "install_selected", "Install"),
         ("d", "remove_selected", "Remove"),
         ("c", "view_queue", "Queue"),
+        ("u", "header_cleanup", "Header cleanup"),
         ("escape", "back_to_series", "Back / quit"),
         Binding("left", "return_to_series", show=False),
     ]
@@ -99,6 +105,8 @@ class KerntopApp(App[None]):
         self.escape_pending = False
         self.show_all_variants = False
         self.queued_actions: tuple[QueuedAction, ...] = ()
+        self.unused_header_packages: tuple[PackageState, ...] = ()
+        self.unused_kernel_support_packages: tuple[PackageState, ...] = ()
 
     @property
     def is_root(self) -> bool:
@@ -142,10 +150,14 @@ class KerntopApp(App[None]):
             )
         except AptUnavailableError as error:
             self.records = ()
+            self.unused_header_packages = ()
+            self.unused_kernel_support_packages = ()
             self.render_error(str(error))
             return
         except Exception as error:
             self.records = ()
+            self.unused_header_packages = ()
+            self.unused_kernel_support_packages = ()
             self.render_error(f"Unable to read the apt cache: {error}")
             return
         self.render_state(state)
@@ -160,6 +172,12 @@ class KerntopApp(App[None]):
         self.active_series = None
         self.native_architecture = state.native_architecture
         self.running_release = state.running_release
+        self.unused_header_packages = unused_headers(
+            self.packages, self.native_architecture
+        )
+        self.unused_kernel_support_packages = unused_kernel_support_packages(
+            self.packages, self.native_architecture
+        )
         self.refresh_records()
         self.render_series()
 
@@ -184,11 +202,19 @@ class KerntopApp(App[None]):
                 str(series.available_count),
                 str(len(series.records)),
             )
+        cleanup_package_count = len(self.unused_header_packages) + len(
+            self.unused_kernel_support_packages
+        )
+        header_cleanup = (
+            f" {cleanup_package_count} unused kernel support package(s): press u to review."
+            if cleanup_package_count
+            else ""
+        )
         self.query_one("#summary", Static).update(
             f"{len(self.series)} kernel series for {self.native_architecture}; "
             f"running: {self.running_release}. "
             f"Showing {'all variants' if self.show_all_variants else 'recommended variants'}. "
-            "Press Enter to view builds."
+            f"Press Enter to view builds.{header_cleanup}"
         )
         self.refresh_bindings()
 
@@ -255,6 +281,14 @@ class KerntopApp(App[None]):
             )
         elif action == "view_queue":
             return self.is_root and bool(self.queued_actions)
+        elif action == "header_cleanup":
+            return (
+                self.is_root
+                and self.active_series is None
+                and bool(
+                    self.unused_header_packages or self.unused_kernel_support_packages
+                )
+            )
         return True
 
     def on_data_table_row_highlighted(self, _event: DataTable.RowHighlighted) -> None:
@@ -399,6 +433,110 @@ class KerntopApp(App[None]):
             QueueScreen(self.queued_actions),
             self.handle_queue_action,
         )
+
+    def action_header_cleanup(self) -> None:
+        """Review installed headers that no longer match an installed image."""
+        if not (self.unused_header_packages or self.unused_kernel_support_packages):
+            self.notify("There are no unused kernel support packages.")
+            return
+        self.push_screen(
+            HeaderCleanupScreen(
+                self.unused_header_packages, self.unused_kernel_support_packages
+            ),
+            self.handle_header_cleanup_action,
+        )
+
+    def handle_header_cleanup_action(self, action: str | None) -> None:
+        if action == "preview-headers":
+            self.start_header_purge(simulate=True)
+        elif action == "purge-headers":
+            self.push_screen(
+                HeaderPurgeConfirmationScreen(
+                    "development headers", self.unused_header_packages
+                ),
+                self.handle_header_purge_confirmation,
+            )
+        elif action == "preview-support":
+            self.start_kernel_support_purge(simulate=True)
+        elif action == "purge-support":
+            self.push_screen(
+                HeaderPurgeConfirmationScreen(
+                    "kernel support", self.unused_kernel_support_packages
+                ),
+                self.handle_kernel_support_purge_confirmation,
+            )
+
+    def handle_header_purge_confirmation(self, confirmed: bool | None) -> None:
+        if confirmed:
+            self.start_header_purge(simulate=False)
+
+    def start_header_purge(self, simulate: bool) -> None:
+        """Preview or purge the currently detected unused headers."""
+        operation = "Simulating" if simulate else "Purging"
+        callback = None if simulate else self.handle_header_purge_finished
+        screen = PreviewOutputScreen(
+            f"{operation} unused development headers", callback
+        )
+        self.push_screen(screen)
+        self.run_worker(
+            self.purge_headers(screen, simulate),
+            group="header-purge",
+            exclusive=True,
+        )
+
+    def handle_header_purge_finished(self, return_code: int) -> None:
+        if return_code == 0:
+            self.action_reload()
+
+    async def purge_headers(self, screen: PreviewOutputScreen, simulate: bool) -> None:
+        """Run the explicit header purge and stream its apt output."""
+        try:
+            command = header_purge_command(
+                self.unused_header_packages, simulate=simulate
+            )
+        except ValueError as error:
+            screen.dismiss()
+            self.notify(str(error), severity="error")
+            return
+        screen.write_output(f"$ {' '.join(command)}")
+        screen.finish(await stream_command(command, screen.write_output))
+
+    def handle_kernel_support_purge_confirmation(self, confirmed: bool | None) -> None:
+        if confirmed:
+            self.start_kernel_support_purge(simulate=False)
+
+    def start_kernel_support_purge(self, simulate: bool) -> None:
+        """Preview or purge the detected unused kernel support packages."""
+        operation = "Simulating" if simulate else "Purging"
+        callback = None if simulate else self.handle_kernel_support_purge_finished
+        screen = PreviewOutputScreen(
+            f"{operation} unused kernel support packages", callback
+        )
+        self.push_screen(screen)
+        self.run_worker(
+            self.purge_kernel_support_packages(screen, simulate),
+            group="kernel-support-purge",
+            exclusive=True,
+        )
+
+    def handle_kernel_support_purge_finished(self, return_code: int) -> None:
+        if return_code == 0:
+            self.action_reload()
+
+    async def purge_kernel_support_packages(
+        self, screen: PreviewOutputScreen, simulate: bool
+    ) -> None:
+        """Run the explicit kernel support purge and stream its apt output."""
+        try:
+            command = support_package_purge_command(
+                self.unused_kernel_support_packages, simulate=simulate
+            )
+        except ValueError as error:
+            screen.dismiss()
+            self.notify(str(error), severity="error")
+            return
+        screen.write_output(f"$ {' '.join(command)}")
+        screen.finish(await stream_command(command, screen.write_output))
 
     def handle_queue_action(self, action: str | None) -> None:
         if action == "clear":
@@ -560,6 +698,7 @@ class KerntopApp(App[None]):
                 "i: install an available image\n"
                 "d: remove an installed non-running image\n"
                 "c: review queued package actions\n"
+                "u: review unused development headers (main browser only)\n"
                 "r: reload the local apt cache\n\n"
                 "Install and remove actions require root mode and run immediately. "
                 "Queued actions can be previewed before their final confirmation.",

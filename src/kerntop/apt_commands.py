@@ -8,7 +8,12 @@ import typing as t
 from dataclasses import dataclass
 from enum import StrEnum
 
-from .kernels import KernelRecord, removal_is_blocked
+from .kernels import (
+    KERNEL_SUPPORT_PREFIXES,
+    KernelRecord,
+    PackageState,
+    removal_is_blocked,
+)
 
 
 class PreviewAction(StrEnum):
@@ -16,6 +21,7 @@ class PreviewAction(StrEnum):
 
     INSTALL = "install"
     REMOVE = "remove"
+    PURGE = "purge"
 
 
 @dataclass(frozen=True)
@@ -37,9 +43,11 @@ class QueuedAction:
 
 def preview_command(action: PreviewAction, record: KernelRecord) -> tuple[str, ...]:
     """Build a safe apt-get simulation command for a kernel record."""
-    if action is PreviewAction.REMOVE and removal_is_blocked(record):
+    if action in (PreviewAction.REMOVE, PreviewAction.PURGE) and removal_is_blocked(
+        record
+    ):
         raise ValueError("The currently running kernel cannot be removed.")
-    if action is PreviewAction.REMOVE and not record.installed:
+    if action in (PreviewAction.REMOVE, PreviewAction.PURGE) and not record.installed:
         raise ValueError("Only installed kernels can be removed.")
     return ("apt-get", "--simulate", action.value, record.package_name)
 
@@ -59,13 +67,19 @@ def run_preview(action: PreviewAction, record: KernelRecord) -> PreviewResult:
 
 def apply_command(action: PreviewAction, record: KernelRecord) -> tuple[str, ...]:
     """Build a single-record apt-get transaction command."""
-    if action is PreviewAction.REMOVE and removal_is_blocked(record):
+    if action in (PreviewAction.REMOVE, PreviewAction.PURGE) and removal_is_blocked(
+        record
+    ):
         raise ValueError("The currently running kernel cannot be removed.")
-    elif action is PreviewAction.REMOVE and not record.installed:
+    elif action in (PreviewAction.REMOVE, PreviewAction.PURGE) and not record.installed:
         raise ValueError("Only installed kernels can be removed.")
     elif action is PreviewAction.INSTALL and record.installed:
         raise ValueError("This kernel image is already installed.")
-    elif action is PreviewAction.INSTALL or action is PreviewAction.REMOVE:
+    elif action in (
+        PreviewAction.INSTALL,
+        PreviewAction.REMOVE,
+        PreviewAction.PURGE,
+    ):
         return ("apt-get", "--assume-yes", action.value, record.package_name)
     else:
         raise ValueError(f"Unsupported kernel action: {action}")
@@ -107,6 +121,58 @@ def transaction_command(
 
     options = ("--simulate",) if simulate else ("--assume-yes",)
     return ("apt-get", *options, "install", *targets)
+
+
+def header_purge_command(
+    headers: t.Iterable[PackageState], simulate: bool = True
+) -> tuple[str, ...]:
+    """Build an apt purge command for explicitly selected unused headers."""
+    selected_headers = tuple(headers)
+    if not selected_headers:
+        raise ValueError("Select at least one unused header package.")
+    if any(
+        not package.installed
+        or not package.name.startswith("linux-headers-")
+        or not package.name.removeprefix("linux-headers-")[:1].isdigit()
+        for package in selected_headers
+    ):
+        raise ValueError("Only installed versioned header packages can be purged.")
+    options = ("--simulate",) if simulate else ("--assume-yes",)
+    return (
+        "apt-get",
+        *options,
+        "purge",
+        *(package.name for package in selected_headers),
+    )
+
+
+def support_package_purge_command(
+    packages: t.Iterable[PackageState], simulate: bool = True
+) -> tuple[str, ...]:
+    """Build an apt purge command for explicit versioned kernel support packages."""
+    selected_packages = tuple(packages)
+    if not selected_packages:
+        raise ValueError("Select at least one unused kernel support package.")
+    if any(
+        not package.installed
+        or not package.name.startswith(KERNEL_SUPPORT_PREFIXES)
+        or not any(
+            package.name.removeprefix(prefix)[:1].isdigit()
+            for prefix in KERNEL_SUPPORT_PREFIXES
+            if package.name.startswith(prefix)
+        )
+        for package in selected_packages
+    ):
+        raise ValueError(
+            "Only installed versioned kernel support packages can be purged."
+        )
+    options = ("--simulate",) if simulate else ("--assume-yes",)
+    return (
+        "apt-get",
+        *options,
+        "purge",
+        *(package.name for package in selected_packages),
+    )
 
 
 async def stream_command(
