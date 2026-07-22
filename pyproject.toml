@@ -4,16 +4,31 @@ build-backend = "uv_build"
 
 [project]
 name = "kerntop"
-version = "0.0.1"
+version = "0.0.6"
 description = "A safe terminal UI for managing Linux kernels on apt-based systems"
 readme = "README.md"
 authors = [
     { name = "Robin van der Noord", email = "robinvandernoord@gmail.com" }
 ]
 requires-python = ">=3.12"
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Environment :: Console",
+    "Intended Audience :: System Administrators",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: System :: Systems Administration",
+    "Topic :: Terminals",
+]
 dependencies = [
     "textual>=0.80.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/robinvandernoord/kerntop"
+Repository = "https://github.com/robinvandernoord/kerntop"
+Issues = "https://github.com/robinvandernoord/kerntop/issues"
 
 [project.scripts]
 kerntop = "kerntop:main"
