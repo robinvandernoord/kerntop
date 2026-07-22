@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import typing as t
 from dataclasses import dataclass
 
 from .apt_compat import import_apt_modules
@@ -25,7 +26,7 @@ class KernelState:
     records: tuple[KernelRecord, ...]
 
 
-def package_states(cache: object) -> tuple[PackageState, ...]:
+def package_states(cache: t.Iterable[t.Any]) -> tuple[PackageState, ...]:
     """Convert an apt cache to the small, testable package representation."""
     states = []
     for package in cache:

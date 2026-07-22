@@ -30,4 +30,4 @@ stop-after-first-failure = true
 coverage = 75
 
 [tool.coverage.run]
-omit = ["src/kerntop/app.py"]
+omit = ["src/kerntop/app.py", "src/kerntop/screens/*"]

@@ -3,15 +3,19 @@
 import asyncio
 import os
 import typing as t
-from dataclasses import dataclass
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Container, VerticalScroll
-from textual.screen import ModalScreen
-from textual.widgets import DataTable, Footer, Header, Log, OptionList, Static
+from textual.widgets import DataTable, Footer, Header, Static
 
-from .apt_commands import PreviewAction, apply_command, preview_command
+from .apt_commands import (
+    PreviewAction,
+    QueuedAction,
+    apply_command,
+    preview_command,
+    stream_command,
+    transaction_command,
+)
 from .apt_compat import AptUnavailableError
 from .apt_state import KernelState, load_kernel_state
 from .kernels import (
@@ -21,192 +25,13 @@ from .kernels import (
     kernel_records,
     kernel_series,
 )
-
-
-class TextScreen(ModalScreen[None]):
-    """A scrollable modal used for help and apt preview output."""
-
-    BINDINGS = [
-        ("escape", "close", "Close"),
-        ("q", "close", "Close"),
-    ]
-
-    def __init__(self, title: str, content: str) -> None:
-        super().__init__()
-        self.title = title
-        self.content = content
-
-    def compose(self) -> ComposeResult:
-        with Container(id="text-dialog"):
-            yield Static(self.title, id="dialog-title")
-            with VerticalScroll(id="dialog-content"):
-                yield Static(self.content)
-            yield Static("Esc or q closes this view.", id="dialog-help")
-
-    def action_close(self) -> None:
-        self.dismiss()
-
-
-@dataclass(frozen=True)
-class KernelAction:
-    """An action available for the currently selected kernel image."""
-
-    label: str
-    action: PreviewAction
-    applies_changes: bool
-
-
-class KernelActionsScreen(ModalScreen[KernelAction | None]):
-    """A context-aware action prompt for one kernel image."""
-
-    BINDINGS = [
-        ("escape", "close", "Close"),
-        ("q", "close", "Close"),
-    ]
-
-    def __init__(self, record: KernelRecord, can_preview: bool) -> None:
-        super().__init__()
-        self.record = record
-        self.can_preview = can_preview
-        if can_preview and not record.installed:
-            self.actions = (
-                KernelAction("Preview installation", PreviewAction.INSTALL, False),
-                KernelAction("Install", PreviewAction.INSTALL, True),
-            )
-        elif can_preview and record.installed and not record.running:
-            self.actions = (
-                KernelAction("Preview removal", PreviewAction.REMOVE, False),
-                KernelAction("Remove", PreviewAction.REMOVE, True),
-            )
-        else:
-            self.actions = ()
-
-    def compose(self) -> ComposeResult:
-        status = (
-            "currently running"
-            if self.record.running
-            else "installed"
-            if self.record.installed
-            else "available"
-        )
-        details = f"{self.record.identifier}\n\nState: {status}"
-        if not self.can_preview:
-            details += "\n\nRun kerntop with sudo to enable package actions."
-        elif self.record.running:
-            details += "\n\nThe running kernel cannot be removed."
-        with Container(id="action-dialog"):
-            yield Static("Kernel actions", id="dialog-title")
-            yield Static(details)
-            if self.actions:
-                yield OptionList(
-                    *(action.label for action in self.actions),
-                    id="kernel-actions",
-                )
-                yield Static(
-                    "Arrow keys choose an action; Enter confirms.",
-                    id="dialog-help",
-                )
-            else:
-                yield Static("Esc or q closes this view.", id="dialog-help")
-
-    def on_mount(self) -> None:
-        """Give the selectable action list keyboard focus immediately."""
-        if self.actions:
-            self.query_one(OptionList).focus()
-
-    def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
-        """Return the action chosen with Enter from the option list."""
-        if event.option_list.id == "kernel-actions":
-            self.dismiss(self.actions[event.option_index])
-
-    def action_close(self) -> None:
-        self.dismiss()
-
-
-class ApplyConfirmationScreen(ModalScreen[bool]):
-    """Require an explicit choice before changing installed packages."""
-
-    BINDINGS = [
-        ("escape", "cancel", "Cancel"),
-        ("q", "cancel", "Cancel"),
-    ]
-
-    def __init__(self, action: PreviewAction, record: KernelRecord) -> None:
-        super().__init__()
-        self.action = action
-        self.record = record
-
-    def compose(self) -> ComposeResult:
-        with Container(id="action-dialog"):
-            yield Static(f"Confirm {self.action.value}", id="dialog-title")
-            yield Static(
-                f"{self.record.identifier}\n\n"
-                "This will change packages on this host using apt-get."
-            )
-            yield OptionList(
-                "Cancel",
-                f"Apply {self.action.value}",
-                id="apply-confirmation",
-            )
-            yield Static(
-                "Arrow keys choose an action; Enter confirms.",
-                id="dialog-help",
-            )
-
-    def on_mount(self) -> None:
-        """Put the safe Cancel choice under the cursor first."""
-        self.query_one(OptionList).focus()
-
-    def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
-        """Return whether the user selected the mutating action."""
-        if event.option_list.id == "apply-confirmation":
-            self.dismiss(event.option_index == 1)
-
-    def action_cancel(self) -> None:
-        self.dismiss(False)
-
-
-class PreviewOutputScreen(ModalScreen[None]):
-    """Show output from an apt simulation while it runs."""
-
-    BINDINGS = [
-        ("escape", "close", "Close"),
-        ("q", "close", "Close"),
-    ]
-
-    def __init__(
-        self,
-        action: PreviewAction,
-        record: KernelRecord,
-        operation: str = "Simulating",
-    ) -> None:
-        super().__init__()
-        self.action = action
-        self.record = record
-        self.operation = operation
-
-    def compose(self) -> ComposeResult:
-        with Container(id="text-dialog"):
-            yield Static(
-                f"{self.operation} {self.action.value}: {self.record.identifier}",
-                id="dialog-title",
-            )
-            yield Log(auto_scroll=True, id="apt-output")
-            yield Static("Running apt-get…", id="apt-status")
-            yield Static("Esc or q closes this view.", id="dialog-help")
-
-    def write_output(self, line: str) -> None:
-        """Append an apt output line to the visible log."""
-        self.query_one("#apt-output", Log).write_line(line)
-
-    def finish(self, return_code: int) -> None:
-        """Show that the apt process has completed."""
-        status = self.query_one("#apt-status", Static)
-        status.update(f"apt-get finished with exit status {return_code}.")
-        status.add_class("success" if return_code == 0 else "failure")
-
-    def action_close(self) -> None:
-        self.dismiss()
+from .screens.kernel_actions import (
+    ApplyConfirmationScreen,
+    KernelAction,
+    KernelActionsScreen,
+)
+from .screens.modal import PreviewOutputScreen, TextScreen
+from .screens.queue import QueueApplyConfirmationScreen, QueueScreen
 
 
 class KerntopApp(App[None]):
@@ -236,7 +61,10 @@ class KerntopApp(App[None]):
         border: heavy $accent;
         background: $surface;
     }
-    #kernel-actions, #apply-confirmation { border: none; padding: 0; }
+    #kernel-actions, #apply-confirmation, #queue-actions, #queue-confirmation {
+        border: none;
+        padding: 0;
+    }
     #apt-output { height: 1fr; }
     #apt-status.success { color: $success; }
     #apt-status.failure { color: $error; }
@@ -251,8 +79,11 @@ class KerntopApp(App[None]):
         ("a", "toggle_all_variants", "Toggle variants"),
         Binding("p", "preview_install_selected", "Preview install"),
         Binding("p", "preview_remove_selected", "Preview removal", priority=True),
+        Binding("q", "queue_install_selected", "Queue install"),
+        Binding("q", "queue_remove_selected", "Queue removal", priority=True),
         ("i", "install_selected", "Install"),
         ("d", "remove_selected", "Remove"),
+        ("c", "view_queue", "Queue"),
         ("escape", "back_to_series", "Back / quit"),
         Binding("left", "return_to_series", show=False),
     ]
@@ -267,6 +98,7 @@ class KerntopApp(App[None]):
         self.running_release = ""
         self.escape_pending = False
         self.show_all_variants = False
+        self.queued_actions: tuple[QueuedAction, ...] = ()
 
     @property
     def is_root(self) -> bool:
@@ -391,7 +223,7 @@ class KerntopApp(App[None]):
         )
         self.refresh_bindings()
 
-    def check_action(self, action: str, _parameters: tuple[t.Any, ...]) -> bool | None:
+    def check_action(self, action: str, parameters: tuple[t.Any, ...]) -> bool | None:
         """Expose navigation and package actions only in their relevant view."""
         record = self.selected_record()
         if action == "preview_install_selected":
@@ -405,6 +237,8 @@ class KerntopApp(App[None]):
             )
         elif action == "install_selected":
             return self.is_root and record is not None and not record.installed
+        elif action == "queue_install_selected":
+            return self.is_root and record is not None and not record.installed
         elif action == "remove_selected":
             return (
                 self.is_root
@@ -412,6 +246,15 @@ class KerntopApp(App[None]):
                 and record.installed
                 and not record.running
             )
+        elif action == "queue_remove_selected":
+            return (
+                self.is_root
+                and record is not None
+                and record.installed
+                and not record.running
+            )
+        elif action == "view_queue":
+            return self.is_root and bool(self.queued_actions)
         return True
 
     def on_data_table_row_highlighted(self, _event: DataTable.RowHighlighted) -> None:
@@ -460,9 +303,11 @@ class KerntopApp(App[None]):
         )
 
     def handle_kernel_action(self, action: KernelAction | None) -> None:
-        """Run the selected preview or immediate package action."""
+        """Run, queue, or preview the selected kernel action."""
         if action is not None:
-            if action.applies_changes:
+            if action.queues_changes:
+                self.queue_action(action.action)
+            elif action.applies_changes:
                 self.show_apply_confirmation(action.action)
             else:
                 self.start_preview(action.action)
@@ -509,9 +354,98 @@ class KerntopApp(App[None]):
         """Confirm installation of the highlighted available image."""
         self.show_apply_confirmation(PreviewAction.INSTALL)
 
+    def action_queue_install_selected(self) -> None:
+        """Queue installation of the highlighted available image."""
+        self.queue_action(PreviewAction.INSTALL)
+
     def action_remove_selected(self) -> None:
         """Confirm removal of the highlighted installed image."""
         self.show_apply_confirmation(PreviewAction.REMOVE)
+
+    def action_queue_remove_selected(self) -> None:
+        """Queue removal of the highlighted installed image."""
+        self.queue_action(PreviewAction.REMOVE)
+
+    def queue_action(self, action: PreviewAction) -> None:
+        """Stage the selected safe package action without changing the host."""
+        if not self.is_root:
+            self.notify(
+                "Package actions require launching the full program with sudo.",
+                severity="warning",
+            )
+            return
+        record = self.selected_record()
+        if record is None:
+            self.notify(
+                "Open a kernel series and select a build first.", severity="warning"
+            )
+            return
+        if any(
+            item.record.package_name == record.package_name
+            for item in self.queued_actions
+        ):
+            self.notify("That kernel is already in the queue.", severity="warning")
+            return
+        self.queued_actions += (QueuedAction(action, record),)
+        self.notify(f"Queued {action.value}: {record.identifier}.")
+        self.refresh_bindings()
+
+    def action_view_queue(self) -> None:
+        """Review, simulate, or apply the staged package transaction."""
+        if not self.queued_actions:
+            self.notify("There are no queued package actions.", severity="warning")
+            return
+        self.push_screen(
+            QueueScreen(self.queued_actions),
+            self.handle_queue_action,
+        )
+
+    def handle_queue_action(self, action: str | None) -> None:
+        if action == "clear":
+            self.queued_actions = ()
+            self.notify("Cleared queued package actions.")
+            self.refresh_bindings()
+        elif action == "simulate":
+            self.start_queued_transaction(simulate=True)
+        elif action == "apply":
+            self.push_screen(
+                QueueApplyConfirmationScreen(self.queued_actions),
+                self.handle_queue_apply_confirmation,
+            )
+
+    def handle_queue_apply_confirmation(self, confirmed: bool | None) -> None:
+        if confirmed:
+            self.start_queued_transaction(simulate=False)
+
+    def start_queued_transaction(self, simulate: bool) -> None:
+        """Preview or run the queued changes and stream apt output live."""
+        operation = "Simulating" if simulate else "Applying"
+        callback = None if simulate else self.handle_queue_apply_finished
+        screen = PreviewOutputScreen(f"{operation} queued changes", callback)
+        self.push_screen(screen)
+        self.run_worker(
+            self.run_queued_transaction(screen, simulate),
+            group="queued-transaction",
+            exclusive=True,
+        )
+
+    def handle_queue_apply_finished(self, return_code: int) -> None:
+        if return_code == 0:
+            self.queued_actions = ()
+            self.action_reload()
+        self.refresh_bindings()
+
+    async def run_queued_transaction(
+        self, screen: PreviewOutputScreen, simulate: bool
+    ) -> None:
+        try:
+            command = transaction_command(self.queued_actions, simulate=simulate)
+        except ValueError as error:
+            screen.dismiss()
+            self.notify(str(error), severity="error")
+            return
+        screen.write_output(f"$ {' '.join(command)}")
+        screen.finish(await stream_command(command, screen.write_output))
 
     def start_preview(self, action: PreviewAction) -> None:
         if not self.is_root:
@@ -526,7 +460,7 @@ class KerntopApp(App[None]):
                 "Open a kernel series and select a build first.", severity="warning"
             )
             return
-        screen = PreviewOutputScreen(action, record)
+        screen = PreviewOutputScreen(f"Simulating {action.value}: {record.identifier}")
         self.push_screen(screen)
         self.run_worker(
             self.preview(action, record, screen), group="preview", exclusive=True
@@ -546,15 +480,7 @@ class KerntopApp(App[None]):
             self.notify(str(error), severity="error")
             return
         screen.write_output(f"$ {' '.join(command)}")
-        process = await asyncio.create_subprocess_exec(
-            *command,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.STDOUT,
-        )
-        assert process.stdout is not None
-        while line := await process.stdout.readline():
-            screen.write_output(line.decode(errors="replace").rstrip("\n"))
-        screen.finish(await process.wait())
+        screen.finish(await stream_command(command, screen.write_output))
 
     def start_apply(self, action: PreviewAction) -> None:
         """Run a single immediate install or removal from the action popup."""
@@ -570,7 +496,7 @@ class KerntopApp(App[None]):
                 "Open a kernel series and select a build first.", severity="warning"
             )
             return
-        screen = PreviewOutputScreen(action, record, operation="Applying")
+        screen = PreviewOutputScreen(f"Applying {action.value}: {record.identifier}")
         self.push_screen(screen)
         self.run_worker(
             self.apply(action, record, screen), group="apply", exclusive=True
@@ -618,15 +544,7 @@ class KerntopApp(App[None]):
             self.notify(str(error), severity="error")
             return
         screen.write_output(f"$ {' '.join(command)}")
-        process = await asyncio.create_subprocess_exec(
-            *command,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.STDOUT,
-        )
-        assert process.stdout is not None
-        while line := await process.stdout.readline():
-            screen.write_output(line.decode(errors="replace").rstrip("\n"))
-        screen.finish(await process.wait())
+        screen.finish(await stream_command(command, screen.write_output))
         self.action_reload()
 
     def action_show_help(self) -> None:
@@ -638,9 +556,12 @@ class KerntopApp(App[None]):
                 "Esc or Left: return to the series list; press Esc twice there to quit\n"
                 "a: toggle recommended and all kernel variants\n"
                 "p: preview the contextual package action\n"
+                "q: queue the contextual package action\n"
                 "i: install an available image\n"
                 "d: remove an installed non-running image\n"
+                "c: review queued package actions\n"
                 "r: reload the local apt cache\n\n"
-                "Install and remove actions require root mode and run immediately.",
+                "Install and remove actions require root mode and run immediately. "
+                "Queued actions can be previewed before their final confirmation.",
             )
         )

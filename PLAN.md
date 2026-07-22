@@ -69,25 +69,31 @@ Validate the difficult integrations without making package changes to the host.
   of an installed non-running image. Stream the `apt-get` output and reload the
   local package state when the command completes.
 
+### Queued transactions
+
+- Stage installations and removals in a Mint-Kernel-Manager-style queue, then
+  review or clear the queued changes before making package changes.
+- Offer an optional simulation of the complete queue and show its streamed
+  `apt-get` package plan.
+- Apply the queue as one apt transaction only after final confirmation, then
+  stream the output and reload the local package state on success.
+
 ## MVP TODO
 
-Turn the proven interface into the safe manager described above.
+Turn the current immediate-action interface into the safe manager described above.
 
 - Add real `apt-get purge` only when the full program was launched under `sudo`;
   keep non-root sessions read-only.
-- Support Mint-Kernel-Manager-style action queues: stage installations and
-  removals, display the queued changes, then simulate the complete queue before
-  applying it as one apt transaction.
-- Simulate every transaction first, show its package plan, stream actual
-  `apt-get` progress, and interrupt child processes safely.
+- Interrupt running `apt-get` child processes safely while preserving their
+  streamed output and final exit status.
 - Select versioned kernel image packages as the primary targets and include
   matching available headers for installation. Continue to protect meta
   packages.
 - Add a privileged repository-refresh action using `apt-get update`, followed
   by a reload of the apt cache.
-- Permanently block removal of the running kernel. Display a persistent warning
-  when there is no non-running fallback image, and repeat the warning before
-  removing the final fallback.
+- Continue to permanently block removal of the running kernel. Display a
+  persistent warning when there is no non-running fallback image, and repeat
+  the warning before removing the final fallback.
 - After image removal, detect leftover matching headers/modules and offer an
   explicitly selected, separately simulated cleanup action;
   never run autoremove automatically.
