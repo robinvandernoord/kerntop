@@ -18,7 +18,7 @@ Requirements:
 Ncurses-style interface, navigable with arrow keys (like ncdu, aptitude)
 Show in one view: installed kernel versions (linux-image/linux-headers packages), available versions in the repo, and which kernel is currently running
 Clearly mark the currently running kernel so it's never accidentally removed (safety guard against an unbootable system)
-Direct actions: install, remove/purge specific kernel versions, with confirmation
+Direct actions: install, remove/purge specific kernel versions
 Works via apt/dpkg under the hood (no separate package manager)
 Lightweight — no dependency on graphical libraries, pure terminal, works over SSH
 
@@ -65,19 +65,21 @@ Validate the difficult integrations without making package changes to the host.
 - Pressing Enter on an individual build opens a context-relevant action prompt.
   It offers only valid preview actions and explains when the running kernel
   cannot be removed.
+- In root mode, allow immediate installation of an available image and removal
+  of an installed non-running image. Stream the `apt-get` output and reload the
+  local package state when the command completes.
 
 ## MVP TODO
 
 Turn the proven interface into the safe manager described above.
 
-- Allow real `apt-get install`, `remove`, and `purge` only when the full program
-  was launched under `sudo`; keep non-root sessions read-only.
+- Add real `apt-get purge` only when the full program was launched under `sudo`;
+  keep non-root sessions read-only.
 - Support Mint-Kernel-Manager-style action queues: stage installations and
-  removals, display the queued changes, then simulate and explicitly confirm
-  the complete queue before applying it as one apt transaction.
-- Simulate every transaction first, show its package plan, require an explicit
-  final confirmation, stream actual `apt-get` progress, and interrupt child
-  processes safely.
+  removals, display the queued changes, then simulate the complete queue before
+  applying it as one apt transaction.
+- Simulate every transaction first, show its package plan, stream actual
+  `apt-get` progress, and interrupt child processes safely.
 - Select versioned kernel image packages as the primary targets and include
   matching available headers for installation. Continue to protect meta
   packages.
@@ -87,7 +89,7 @@ Turn the proven interface into the safe manager described above.
   when there is no non-running fallback image, and repeat the warning before
   removing the final fallback.
 - After image removal, detect leftover matching headers/modules and offer an
-  explicitly selected, separately simulated and confirmed cleanup action;
+  explicitly selected, separately simulated cleanup action;
   never run autoremove automatically.
 
 ## Future improvements

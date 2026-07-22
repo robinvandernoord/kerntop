@@ -45,3 +45,17 @@ def run_preview(action: PreviewAction, record: KernelRecord) -> PreviewResult:
         text=True,
     )
     return PreviewResult(command, completed.returncode, completed.stdout)
+
+
+def apply_command(action: PreviewAction, record: KernelRecord) -> tuple[str, ...]:
+    """Build a single-record apt-get transaction command."""
+    if action is PreviewAction.REMOVE and removal_is_blocked(record):
+        raise ValueError("The currently running kernel cannot be removed.")
+    elif action is PreviewAction.REMOVE and not record.installed:
+        raise ValueError("Only installed kernels can be removed.")
+    elif action is PreviewAction.INSTALL and record.installed:
+        raise ValueError("This kernel image is already installed.")
+    elif action is PreviewAction.INSTALL or action is PreviewAction.REMOVE:
+        return ("apt-get", "--assume-yes", action.value, record.package_name)
+    else:
+        raise ValueError(f"Unsupported kernel action: {action}")
