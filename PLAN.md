@@ -62,14 +62,14 @@ Validate the difficult integrations without making package changes to the host.
   running kernel (such as PikaOS's `-pikaos`).
 - Provide an explicit all-variants view for unsigned, cloud, RT, debug, and
   other distribution-specific alternatives, without reloading the apt cache.
+- Pressing Enter on an individual build opens a context-relevant action prompt.
+  It offers only valid preview actions and explains when the running kernel
+  cannot be removed.
 
 ## MVP TODO
 
 Turn the proven interface into the safe manager described above.
 
-- Decide and implement the Enter action for an individual kernel build. It
-  should open a context-relevant action prompt; the exact actions and prompt
-  design remain to be decided.
 - Allow real `apt-get install`, `remove`, and `purge` only when the full program
   was launched under `sudo`; keep non-root sessions read-only.
 - Support Mint-Kernel-Manager-style action queues: stage installations and

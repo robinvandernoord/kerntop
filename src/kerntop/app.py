@@ -8,7 +8,14 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Container, VerticalScroll
 from textual.screen import ModalScreen
-from textual.widgets import DataTable, Footer, Header, Static
+from textual.widgets import (
+    DataTable,
+    Footer,
+    Header,
+    LoadingIndicator,
+    OptionList,
+    Static,
+)
 
 from .apt_commands import PreviewAction, PreviewResult, run_preview
 from .apt_compat import AptUnavailableError
@@ -36,7 +43,7 @@ class TextScreen(ModalScreen[None]):
         self.content = content
 
     def compose(self) -> ComposeResult:
-        with Container(id="dialog"):
+        with Container(id="text-dialog"):
             yield Static(self.title, id="dialog-title")
             with VerticalScroll(id="dialog-content"):
                 yield Static(self.content)
@@ -44,6 +51,85 @@ class TextScreen(ModalScreen[None]):
 
     def action_close(self) -> None:
         self.dismiss()
+
+
+class KernelActionsScreen(ModalScreen[PreviewAction | None]):
+    """A context-aware action prompt for one kernel image."""
+
+    BINDINGS = [
+        ("escape", "close", "Close"),
+        ("q", "close", "Close"),
+    ]
+
+    def __init__(self, record: KernelRecord, can_preview: bool) -> None:
+        super().__init__()
+        self.record = record
+        self.can_preview = can_preview
+        if can_preview and not record.installed:
+            self.actions = (PreviewAction.INSTALL,)
+        elif can_preview and record.installed and not record.running:
+            self.actions = (PreviewAction.REMOVE,)
+        else:
+            self.actions = ()
+
+    def compose(self) -> ComposeResult:
+        status = (
+            "currently running"
+            if self.record.running
+            else "installed"
+            if self.record.installed
+            else "available"
+        )
+        details = f"{self.record.identifier}\n\nState: {status}"
+        if not self.can_preview:
+            details += "\n\nRun kerntop with sudo to preview package actions."
+        elif self.record.running:
+            details += "\n\nThe running kernel cannot be removed."
+        with Container(id="action-dialog"):
+            yield Static("Kernel actions", id="dialog-title")
+            yield Static(details)
+            if self.actions:
+                yield OptionList(
+                    *(f"Preview {action.value}" for action in self.actions),
+                    id="kernel-actions",
+                )
+                yield Static(
+                    "Arrow keys choose an action; Enter confirms.",
+                    id="dialog-help",
+                )
+            else:
+                yield Static("Esc or q closes this view.", id="dialog-help")
+
+    def on_mount(self) -> None:
+        """Give the selectable action list keyboard focus immediately."""
+        if self.actions:
+            self.query_one(OptionList).focus()
+
+    def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
+        """Return the action chosen with Enter from the option list."""
+        if event.option_list.id == "kernel-actions":
+            self.dismiss(self.actions[event.option_index])
+
+    def action_close(self) -> None:
+        self.dismiss()
+
+
+class PreviewProgressScreen(ModalScreen[None]):
+    """Show that an apt simulation is running before its output is available."""
+
+    def __init__(self, action: PreviewAction, record: KernelRecord) -> None:
+        super().__init__()
+        self.action = action
+        self.record = record
+
+    def compose(self) -> ComposeResult:
+        with Container(id="progress-dialog"):
+            yield Static(
+                f"Simulating {self.action.value}: {self.record.identifier}",
+                id="dialog-title",
+            )
+            yield LoadingIndicator()
+            yield Static("Waiting for apt-get…", id="dialog-help")
 
 
 class KerntopApp(App[None]):
@@ -56,13 +142,31 @@ class KerntopApp(App[None]):
     #mode.read-only { color: $warning; }
     #summary { padding: 0 1; }
     DataTable { height: 1fr; }
-    #dialog {
-        width: 90%;
+    DataTable > .datatable--cursor { text-style: none; }
+    DataTable:focus > .datatable--cursor { text-style: none; }
+    ModalScreen { align: center middle; }
+    #text-dialog {
+        width: 60%;
         height: 85%;
         padding: 1 2;
         border: heavy $accent;
         background: $surface;
     }
+    #action-dialog {
+        width: 60%;
+        height: auto;
+        padding: 1 2;
+        border: heavy $accent;
+        background: $surface;
+    }
+    #progress-dialog {
+        width: 60%;
+        height: 8;
+        padding: 1 2;
+        border: heavy $accent;
+        background: $surface;
+    }
+    #kernel-actions { border: none; padding: 0; }
     #dialog-title { text-style: bold; margin-bottom: 1; }
     #dialog-content { height: 1fr; }
     #dialog-help { margin-top: 1; color: $text-muted; }
@@ -184,9 +288,11 @@ class KerntopApp(App[None]):
     def render_builds(self, series: KernelSeries) -> None:
         table = self.query_one(DataTable)
         table.clear(columns=True)
-        table.add_columns(
-            "Build / flavour", "State", "Installed", "Candidate", "Headers"
-        )
+        table.add_column("Build / flavour", width=24)
+        table.add_column("State", width=10)
+        table.add_column("Installed", width=17)
+        table.add_column("Candidate", width=17)
+        table.add_column("Headers", width=24)
         for record in series.records:
             status = (
                 "RUNNING"
@@ -205,7 +311,8 @@ class KerntopApp(App[None]):
             )
         self.query_one("#summary", Static).update(
             f"Kernel series {series.name}: {len(series.records)} build(s); "
-            f"showing {'all variants' if self.show_all_variants else 'recommended variants'}."
+            f"showing {'all variants' if self.show_all_variants else 'recommended variants'}. "
+            "Press Enter for actions."
         )
         self.refresh_bindings()
 
@@ -215,10 +322,14 @@ class KerntopApp(App[None]):
             return self.active_series is not None
         return True
 
-    def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
-        """Open the selected series when the table consumes Enter."""
+    def on_data_table_row_selected(self, _event: DataTable.RowSelected) -> None:
+        """Open a selected series or show actions for a selected build."""
         if self.active_series is None:
             self.action_open_series()
+        else:
+            record = self.selected_record()
+            if record is not None:
+                self.show_kernel_actions(record)
 
     def action_open_series(self) -> None:
         if self.active_series is not None:
@@ -244,6 +355,18 @@ class KerntopApp(App[None]):
             self.render_series()
         else:
             self.render_builds(self.active_series)
+
+    def show_kernel_actions(self, record: KernelRecord) -> None:
+        """Open the context-aware action prompt for a kernel build."""
+        self.push_screen(
+            KernelActionsScreen(record, self.is_root),
+            self.handle_kernel_action,
+        )
+
+    def handle_kernel_action(self, action: PreviewAction | None) -> None:
+        """Run a requested preview after the action prompt closes."""
+        if action is not None:
+            self.start_preview(action)
 
     def action_back_to_series(self) -> None:
         if self.active_series is not None:
@@ -294,17 +417,25 @@ class KerntopApp(App[None]):
                 "Open a kernel series and select a build first.", severity="warning"
             )
             return
+        self.push_screen(PreviewProgressScreen(action, record))
         self.run_worker(self.preview(action, record), group="preview", exclusive=True)
 
     async def preview(self, action: PreviewAction, record: KernelRecord) -> None:
         try:
             result = await asyncio.to_thread(run_preview, action, record)
         except ValueError as error:
+            self.close_preview_progress()
             self.notify(str(error), severity="error")
             return
         self.show_preview(action, result)
 
+    def close_preview_progress(self) -> None:
+        """Dismiss the temporary progress modal before showing a result."""
+        if isinstance(self.screen, PreviewProgressScreen):
+            self.pop_screen()
+
     def show_preview(self, action: PreviewAction, result: PreviewResult) -> None:
+        self.close_preview_progress()
         command = " ".join(result.command)
         content = f"$ {command}\n\n{result.output or '(no output)'}"
         title = f"{action.value.title()} preview (exit status {result.return_code})"
@@ -315,7 +446,7 @@ class KerntopApp(App[None]):
             TextScreen(
                 "kerntop 0.1.0 minimum viable manager",
                 "Arrow keys: choose a row\n"
-                "Enter: open a kernel series\n"
+                "Enter: open the selected item\n"
                 "Esc or Left: return to the series list; press Esc twice there to quit\n"
                 "a: toggle recommended and all kernel variants\n"
                 "i: simulate installation\n"
