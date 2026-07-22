@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
+import subprocess
 from dataclasses import dataclass
 from enum import StrEnum
-import subprocess
-
 
 from .kernels import KernelRecord, removal_is_blocked
 

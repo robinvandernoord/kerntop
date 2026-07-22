@@ -1,15 +1,13 @@
 """Pure models and classification helpers for versioned kernel packages."""
 
-from __future__ import annotations
-
-from dataclasses import dataclass
 import re
-from typing import Iterable
-
+import typing as t
+from dataclasses import dataclass
 
 IMAGE_PREFIX = "linux-image-"
 HEADER_PREFIX = "linux-headers-"
 RELEASE_FLAVOUR_PATTERN = re.compile(r"^\d+(?:\.\d+)+(.*)$")
+SERIES_PATTERN = re.compile(r"^(\d+\.\d+)")
 
 
 @dataclass(frozen=True)
@@ -41,6 +39,24 @@ class KernelRecord:
         return self.package_name.removeprefix(IMAGE_PREFIX)
 
 
+@dataclass(frozen=True)
+class KernelSeries:
+    """A kernel major/minor series and the image builds it contains."""
+
+    name: str
+    records: tuple[KernelRecord, ...]
+
+    @property
+    def installed_count(self) -> int:
+        """Return how many images in the series are installed."""
+        return sum(record.installed for record in self.records)
+
+    @property
+    def available_count(self) -> int:
+        """Return how many images in the series are available from apt."""
+        return sum(not record.installed for record in self.records)
+
+
 def kernel_identifier(package_name: str) -> str | None:
     """Return a versioned image identifier, excluding kernel meta packages."""
     if not package_name.startswith(IMAGE_PREFIX):
@@ -53,7 +69,10 @@ def kernel_identifier(package_name: str) -> str | None:
 
 def is_kernel_meta_package(package_name: str) -> bool:
     """Identify linux-image meta packages, which are deliberately protected."""
-    return package_name.startswith(IMAGE_PREFIX) and kernel_identifier(package_name) is None
+    return (
+        package_name.startswith(IMAGE_PREFIX)
+        and kernel_identifier(package_name) is None
+    )
 
 
 def running_image_package(running_release: str) -> str:
@@ -67,11 +86,17 @@ def running_flavour(running_release: str) -> str:
     return match.group(1) if match else ""
 
 
-def is_relevant_image(package: PackageState, running_release: str) -> bool:
-    """Keep installed images and available images matching the running flavour."""
+def is_relevant_image(
+    package: PackageState,
+    running_release: str,
+    include_all_variants: bool = False,
+) -> bool:
+    """Select default recommended images or every versioned image variant."""
     identifier = kernel_identifier(package.name)
     if identifier is None:
         return False
+    elif include_all_variants:
+        return True
     elif package.section == "debug" or identifier.endswith("-dbg"):
         return False
     elif package.installed:
@@ -83,7 +108,7 @@ def is_relevant_image(package: PackageState, running_release: str) -> bool:
 
 def matching_headers(
     image_package: str,
-    packages: Iterable[PackageState],
+    packages: t.Iterable[PackageState],
 ) -> tuple[PackageState, ...]:
     """Return headers that belong to one versioned image package."""
     identifier = kernel_identifier(image_package)
@@ -94,9 +119,10 @@ def matching_headers(
 
 
 def kernel_records(
-    packages: Iterable[PackageState],
+    packages: t.Iterable[PackageState],
     native_architecture: str,
     running_release: str,
+    include_all_variants: bool = False,
 ) -> tuple[KernelRecord, ...]:
     """Build kernel records from native-architecture python-apt package state."""
     native_packages = tuple(
@@ -105,7 +131,11 @@ def kernel_records(
     running_package = running_image_package(running_release)
     records = []
     for package in native_packages:
-        if not is_relevant_image(package, running_release):
+        if not is_relevant_image(
+            package,
+            running_release,
+            include_all_variants=include_all_variants,
+        ):
             continue
         if not package.installed and package.candidate_version is None:
             continue
@@ -120,6 +150,20 @@ def kernel_records(
             )
         )
     return tuple(sorted(records, key=lambda record: record.identifier, reverse=True))
+
+
+def kernel_series(records: t.Iterable[KernelRecord]) -> tuple[KernelSeries, ...]:
+    """Group versioned kernel images into major/minor series for navigation."""
+    grouped: dict[str, list[KernelRecord]] = {}
+    for record in records:
+        match = SERIES_PATTERN.match(record.identifier)
+        if match is None:
+            continue
+        grouped.setdefault(match.group(1), []).append(record)
+    return tuple(
+        KernelSeries(name, tuple(series_records))
+        for name, series_records in sorted(grouped.items(), reverse=True)
+    )
 
 
 def removal_is_blocked(record: KernelRecord) -> bool:

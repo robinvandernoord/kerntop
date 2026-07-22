@@ -1,13 +1,11 @@
 """Compatibility helpers for importing Debian's python-apt bindings."""
 
-from __future__ import annotations
-
 import importlib
 import re
 import sys
+import typing as t
 from pathlib import Path
 from types import ModuleType
-from typing import Iterable
 
 
 class AptUnavailableError(RuntimeError):
@@ -16,7 +14,7 @@ class AptUnavailableError(RuntimeError):
 
 def system_site_paths(
     version: tuple[int, int] | None = None,
-    prefixes: Iterable[str] = ("/usr", "/usr/local"),
+    prefixes: t.Iterable[str] = ("/usr", "/usr/local"),
 ) -> tuple[Path, ...]:
     """Return likely distro site-package directories for the active Python."""
     major, minor = version or sys.version_info[:2]
@@ -32,7 +30,7 @@ def system_site_paths(
     return tuple(dict.fromkeys(paths))
 
 
-def available_apt_pkg_abis(paths: Iterable[Path]) -> tuple[str, ...]:
+def available_apt_pkg_abis(paths: t.Iterable[Path]) -> tuple[str, ...]:
     """Return CPython ABI tags exposed by ``apt_pkg`` in distro paths."""
     pattern = re.compile(r"apt_pkg\.cpython-(\d+).*\.so$")
     abis: set[str] = set()

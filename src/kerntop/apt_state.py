@@ -2,11 +2,17 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import os
+from dataclasses import dataclass
 
 from .apt_compat import import_apt_modules
-from .kernels import KernelRecord, PackageState, kernel_records
+from .kernels import (
+    HEADER_PREFIX,
+    IMAGE_PREFIX,
+    KernelRecord,
+    PackageState,
+    kernel_records,
+)
 
 
 @dataclass(frozen=True)
@@ -15,6 +21,7 @@ class KernelState:
 
     native_architecture: str
     running_release: str
+    packages: tuple[PackageState, ...]
     records: tuple[KernelRecord, ...]
 
 
@@ -22,6 +29,8 @@ def package_states(cache: object) -> tuple[PackageState, ...]:
     """Convert an apt cache to the small, testable package representation."""
     states = []
     for package in cache:
+        if not package.name.startswith((IMAGE_PREFIX, HEADER_PREFIX)):
+            continue
         installed = package.installed
         candidate = package.candidate
         version = candidate or installed
@@ -40,15 +49,17 @@ def package_states(cache: object) -> tuple[PackageState, ...]:
     return tuple(states)
 
 
-def load_kernel_state() -> KernelState:
-    """Load kernel image information from the local apt cache."""
+def load_kernel_state(include_all_variants: bool = False) -> KernelState:
+    """Load recommended or all kernel image variants from the local apt cache."""
     apt, apt_pkg = import_apt_modules()
     cache = apt.Cache()
     native_architecture = apt_pkg.config.find("APT::Architecture")
     running_release = os.uname().release
+    packages = package_states(cache)
     records = kernel_records(
-        package_states(cache),
+        packages,
         native_architecture,
         running_release,
+        include_all_variants=include_all_variants,
     )
-    return KernelState(native_architecture, running_release, records)
+    return KernelState(native_architecture, running_release, packages, records)

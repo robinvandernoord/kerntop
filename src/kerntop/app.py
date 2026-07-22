@@ -1,9 +1,8 @@
 """Textual interface for the kerntop proof of concept."""
 
-from __future__ import annotations
-
 import asyncio
 import os
+import typing as t
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding
@@ -14,7 +13,13 @@ from textual.widgets import DataTable, Footer, Header, Static
 from .apt_commands import PreviewAction, PreviewResult, run_preview
 from .apt_compat import AptUnavailableError
 from .apt_state import KernelState, load_kernel_state
-from .kernels import KernelRecord
+from .kernels import (
+    KernelRecord,
+    KernelSeries,
+    PackageState,
+    kernel_records,
+    kernel_series,
+)
 
 
 class TextScreen(ModalScreen[None]):
@@ -64,9 +69,11 @@ class KerntopApp(App[None]):
     """
     BINDINGS = [
         Binding("ctrl+c", "interrupt_quit", show=False, priority=True, system=True),
-        ("q", "quit", "Quit"),
         ("h", "show_help", "Help"),
         ("r", "reload", "Reload cache"),
+        ("a", "toggle_all_variants", "Toggle variants"),
+        ("escape", "back_to_series", "Back / quit"),
+        Binding("left", "return_to_series", show=False),
         ("i", "preview_install", "Preview install"),
         ("x", "preview_remove", "Preview removal"),
     ]
@@ -74,7 +81,13 @@ class KerntopApp(App[None]):
     def __init__(self) -> None:
         super().__init__()
         self.records: tuple[KernelRecord, ...] = ()
-        self.interrupt_pending = False
+        self.packages: tuple[PackageState, ...] = ()
+        self.series: tuple[KernelSeries, ...] = ()
+        self.active_series: KernelSeries | None = None
+        self.native_architecture = ""
+        self.running_release = ""
+        self.escape_pending = False
+        self.show_all_variants = False
 
     @property
     def is_root(self) -> bool:
@@ -90,10 +103,14 @@ class KerntopApp(App[None]):
     def on_mount(self) -> None:
         mode = self.query_one("#mode", Static)
         if self.is_root:
-            mode.update("Root mode: apt-get simulations are available; no changes are made.")
+            mode.update(
+                "Root mode: apt-get simulations are available; no changes are made."
+            )
             mode.add_class("root")
         else:
-            mode.update("Read-only mode: run kerntop with sudo to enable apt-get previews.")
+            mode.update(
+                "Read-only mode: run kerntop with sudo to enable apt-get previews."
+            )
             mode.add_class("read-only")
         self.action_reload()
 
@@ -101,22 +118,17 @@ class KerntopApp(App[None]):
         self.run_worker(self.load_state(), group="load-state", exclusive=True)
 
     def action_interrupt_quit(self) -> None:
-        """Require a second Ctrl-C to terminate the application immediately."""
-        if self.interrupt_pending:
-            self.exit()
-        else:
-            self.interrupt_pending = True
-            self.notify(
-                "Press Ctrl-C again to quit immediately.",
-                title="Do you want to quit?",
-                severity="warning",
-            )
+        """Exit immediately when the terminal sends an interrupt."""
+        self.exit()
 
     async def load_state(self) -> None:
         summary = self.query_one("#summary", Static)
         summary.update("Loading the local apt cache…")
         try:
-            state = await asyncio.to_thread(load_kernel_state)
+            state = await asyncio.to_thread(
+                load_kernel_state,
+                include_all_variants=self.show_all_variants,
+            )
         except AptUnavailableError as error:
             self.records = ()
             self.render_error(str(error))
@@ -133,26 +145,135 @@ class KerntopApp(App[None]):
         self.query_one("#summary", Static).update(message)
 
     def render_state(self, state: KernelState) -> None:
-        self.records = state.records
+        self.packages = state.packages
+        self.active_series = None
+        self.native_architecture = state.native_architecture
+        self.running_release = state.running_release
+        self.refresh_records()
+        self.render_series()
+
+    def refresh_records(self) -> None:
+        """Rebuild the displayed records from the cached kernel package state."""
+        self.records = kernel_records(
+            self.packages,
+            self.native_architecture,
+            self.running_release,
+            include_all_variants=self.show_all_variants,
+        )
+        self.series = kernel_series(self.records)
+
+    def render_series(self) -> None:
         table = self.query_one(DataTable)
         table.clear(columns=True)
-        table.add_columns("Kernel", "State", "Installed", "Candidate", "Headers")
-        for record in self.records:
-            status = "RUNNING" if record.running else "installed" if record.installed else "available"
+        table.add_columns("Kernel series", "Installed", "Available", "Builds")
+        for series in self.series:
+            table.add_row(
+                series.name,
+                str(series.installed_count),
+                str(series.available_count),
+                str(len(series.records)),
+            )
+        self.query_one("#summary", Static).update(
+            f"{len(self.series)} kernel series for {self.native_architecture}; "
+            f"running: {self.running_release}. "
+            f"Showing {'all variants' if self.show_all_variants else 'recommended variants'}. "
+            "Press Enter to view builds."
+        )
+        self.refresh_bindings()
+
+    def render_builds(self, series: KernelSeries) -> None:
+        table = self.query_one(DataTable)
+        table.clear(columns=True)
+        table.add_columns(
+            "Build / flavour", "State", "Installed", "Candidate", "Headers"
+        )
+        for record in series.records:
+            status = (
+                "RUNNING"
+                if record.running
+                else "installed"
+                if record.installed
+                else "available"
+            )
             installed = record.installed_version or "—"
             candidate = record.candidate_version or "—"
-            headers = ", ".join(header.name.removeprefix("linux-headers-") for header in record.headers)
-            table.add_row(record.identifier, status, installed, candidate, headers or "—")
+            headers = ", ".join(
+                header.name.removeprefix("linux-headers-") for header in record.headers
+            )
+            table.add_row(
+                record.identifier, status, installed, candidate, headers or "—"
+            )
         self.query_one("#summary", Static).update(
-            f"{len(self.records)} kernel image(s) for {state.native_architecture}; "
-            f"running: {state.running_release}"
+            f"Kernel series {series.name}: {len(series.records)} build(s); "
+            f"showing {'all variants' if self.show_all_variants else 'recommended variants'}."
+        )
+        self.refresh_bindings()
+
+    def check_action(self, action: str, _parameters: tuple[t.Any, ...]) -> bool | None:
+        """Expose navigation and package actions only in their relevant view."""
+        if action in {"preview_install", "preview_remove"}:
+            return self.active_series is not None
+        return True
+
+    def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
+        """Open the selected series when the table consumes Enter."""
+        if self.active_series is None:
+            self.action_open_series()
+
+    def action_open_series(self) -> None:
+        if self.active_series is not None:
+            return
+        cursor_row = self.query_one(DataTable).cursor_row
+        if cursor_row < 0 or cursor_row >= len(self.series):
+            self.notify("Select a kernel series first.", severity="warning")
+            return
+        self.active_series = self.series[cursor_row]
+        self.render_builds(self.active_series)
+
+    def action_toggle_all_variants(self) -> None:
+        """Switch views without reopening the local apt cache."""
+        active_series_name = self.active_series.name if self.active_series else None
+        self.show_all_variants = not self.show_all_variants
+        self.escape_pending = False
+        self.refresh_records()
+        self.active_series = next(
+            (series for series in self.series if series.name == active_series_name),
+            None,
+        )
+        if self.active_series is None:
+            self.render_series()
+        else:
+            self.render_builds(self.active_series)
+
+    def action_back_to_series(self) -> None:
+        if self.active_series is not None:
+            self.action_return_to_series()
+            return
+        if self.escape_pending:
+            self.exit()
+            return
+        self.escape_pending = True
+        self.notify(
+            "Press Esc again to quit.",
+            title="Do you want to quit?",
+            severity="warning",
         )
 
+    def action_return_to_series(self) -> None:
+        """Return from a build list without treating Left as an exit key."""
+        if self.active_series is None:
+            return
+        self.active_series = None
+        self.escape_pending = False
+        self.render_series()
+
     def selected_record(self) -> KernelRecord | None:
-        cursor_row = self.query_one(DataTable).cursor_row
-        if cursor_row < 0 or cursor_row >= len(self.records):
+        if self.active_series is None:
             return None
-        return self.records[cursor_row]
+        cursor_row = self.query_one(DataTable).cursor_row
+        if cursor_row < 0 or cursor_row >= len(self.active_series.records):
+            return None
+        return self.active_series.records[cursor_row]
 
     def action_preview_install(self) -> None:
         self.start_preview(PreviewAction.INSTALL)
@@ -162,11 +283,16 @@ class KerntopApp(App[None]):
 
     def start_preview(self, action: PreviewAction) -> None:
         if not self.is_root:
-            self.notify("Preview controls require launching the full program with sudo.", severity="warning")
+            self.notify(
+                "Preview controls require launching the full program with sudo.",
+                severity="warning",
+            )
             return
         record = self.selected_record()
         if record is None:
-            self.notify("Select a kernel image first.", severity="warning")
+            self.notify(
+                "Open a kernel series and select a build first.", severity="warning"
+            )
             return
         self.run_worker(self.preview(action, record), group="preview", exclusive=True)
 
@@ -187,12 +313,14 @@ class KerntopApp(App[None]):
     def action_show_help(self) -> None:
         self.push_screen(
             TextScreen(
-                "kerntop 0.0.1 proof of concept",
-                "Arrow keys: choose a kernel image\n"
+                "kerntop 0.1.0 minimum viable manager",
+                "Arrow keys: choose a row\n"
+                "Enter: open a kernel series\n"
+                "Esc or Left: return to the series list; press Esc twice there to quit\n"
+                "a: toggle recommended and all kernel variants\n"
                 "i: simulate installation\n"
                 "x: simulate removal (running kernel is blocked)\n"
-                "r: reload the local apt cache\n"
-                "q: quit\n\n"
+                "r: reload the local apt cache\n\n"
                 "This release never installs, removes, purges, or updates packages.",
             )
         )

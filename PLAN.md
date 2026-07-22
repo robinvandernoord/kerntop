@@ -26,7 +26,9 @@ Comparable existing tools for reference: aptitude (ncurses package manager, gene
 
 Goal: a tool that specifically fills the kernel-management gap the generic tools leave open — the distinction between active/installed/available, and a safe removal workflow.
 
-## Release 0.0.1: proof of concept
+## Previously added
+
+### Release 0.0.1: proof of concept
 
 Validate the difficult integrations without making package changes to the host.
 
@@ -50,22 +52,24 @@ Validate the difficult integrations without making package changes to the host.
 - Add focused unit tests for pure package classification, running-kernel safety,
   compatibility-path lookup, and preview command construction.
 
-Not included: real transaction confirmation/progress handling, repository
-refresh, companion cleanup, fallback-kernel warnings, filtering/sorting, and
-persistent settings.
-
-## Release 0.1.0: minimum viable manager
-
-Turn the proven interface into the safe manager described above.
+### MVP hierarchy and discovery
 
 - Replace the flat image list with an ncdu/Mint-Kernel-Manager-style hierarchy:
   first choose a kernel series (for example `6.9` or `7.0`) with installed and
   available counts, then drill into the builds and flavours in that series.
 - Default the hierarchy to recommended images without hard-coding distribution
-  flavour names: exclude packages marked as debug, prefer the flavour of the
-  running kernel (such as PikaOS's `-pikaos`), and use relevant image meta
-  package relationships where available. Provide an explicit all-variants view
-  for unsigned, cloud, RT, debug, and other distribution-specific alternatives.
+  flavour names: exclude packages marked as debug and prefer the flavour of the
+  running kernel (such as PikaOS's `-pikaos`).
+- Provide an explicit all-variants view for unsigned, cloud, RT, debug, and
+  other distribution-specific alternatives, without reloading the apt cache.
+
+## MVP TODO
+
+Turn the proven interface into the safe manager described above.
+
+- Decide and implement the Enter action for an individual kernel build. It
+  should open a context-relevant action prompt; the exact actions and prompt
+  design remain to be decided.
 - Allow real `apt-get install`, `remove`, and `purge` only when the full program
   was launched under `sudo`; keep non-root sessions read-only.
 - Support Mint-Kernel-Manager-style action queues: stage installations and
@@ -85,3 +89,10 @@ Turn the proven interface into the safe manager described above.
 - After image removal, detect leftover matching headers/modules and offer an
   explicitly selected, separately simulated and confirmed cleanup action;
   never run autoremove automatically.
+
+## Future improvements
+
+- Use relevant image meta-package relationships, where available, to refine the
+  recommended image variants. The current running-flavour heuristic and
+  all-variants view are sufficient for the MVP unless a distribution exposes an
+  edge case.
