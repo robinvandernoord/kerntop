@@ -58,8 +58,19 @@ persistent settings.
 
 Turn the proven interface into the safe manager described above.
 
+- Replace the flat image list with an ncdu/Mint-Kernel-Manager-style hierarchy:
+  first choose a kernel series (for example `6.9` or `7.0`) with installed and
+  available counts, then drill into the builds and flavours in that series.
+- Default the hierarchy to recommended images without hard-coding distribution
+  flavour names: exclude packages marked as debug, prefer the flavour of the
+  running kernel (such as PikaOS's `-pikaos`), and use relevant image meta
+  package relationships where available. Provide an explicit all-variants view
+  for unsigned, cloud, RT, debug, and other distribution-specific alternatives.
 - Allow real `apt-get install`, `remove`, and `purge` only when the full program
   was launched under `sudo`; keep non-root sessions read-only.
+- Support Mint-Kernel-Manager-style action queues: stage installations and
+  removals, display the queued changes, then simulate and explicitly confirm
+  the complete queue before applying it as one apt transaction.
 - Simulate every transaction first, show its package plan, require an explicit
   final confirmation, stream actual `apt-get` progress, and interrupt child
   processes safely.

@@ -1,5 +1,7 @@
-# Secretes
 .env
+.coverage
+coverage.*
+htmlcov/
 
 # Python bytecode and tooling caches
 __pycache__/
@@ -10,7 +12,7 @@ __pycache__/
 
 # Local Python environments and uv state
 .venv/
-venv/
+venv*
 uv.lock
 
 # Build and distribution artifacts

@@ -4,14 +4,30 @@ build-backend = "uv_build"
 
 [project]
 name = "kerntop"
-version = "0.0.0"
+version = "0.0.1"
 description = "A safe terminal UI for managing Linux kernels on apt-based systems"
 readme = "README.md"
 authors = [
     { name = "Robin van der Noord", email = "robinvandernoord@gmail.com" }
 ]
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "textual>=0.80.0",
+]
 
 [project.scripts]
 kerntop = "kerntop:main"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "su6[all]",
+]
+
+[tool.su6]
+directory = "src"
+stop-after-first-failure = true
+coverage = 75
+
+[tool.coverage.run]
+omit = ["src/kerntop/app.py"]
