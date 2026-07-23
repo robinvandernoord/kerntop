@@ -9,7 +9,7 @@ browser, marks the running kernel, and keeps kernel meta packages out of
 package actions.
 
 > [!WARNING]
-> `kerntop` 0.0.7 is an early release. It can run real `apt-get` transactions
+> `kerntop` 0.0.8 is an early release. It can run real `apt-get` transactions
 > when started as root. Read the confirmation dialog and preview a transaction
 > before applying it.
 
@@ -82,7 +82,7 @@ the application for the complete key reference. The primary actions are:
 
 ## Scope and current limitations
 
-The local apt cache supplies the available-kernel view; 0.0.7 does not refresh
+The local apt cache supplies the available-kernel view; 0.0.8 does not refresh
 repository indexes itself. Kernel images are installed as image packages, while
 headers and support packages are handled separately. See [PLAN.md](PLAN.md) for
 the remaining MVP safety work.
