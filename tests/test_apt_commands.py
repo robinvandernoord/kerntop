@@ -6,7 +6,6 @@ from kerntop.apt_commands import (
     PreviewAction,
     QueuedAction,
     apply_command,
-    preview_command,
     run_preview,
     stream_command,
     transaction_command,

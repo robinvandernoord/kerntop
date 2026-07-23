@@ -24,8 +24,10 @@ from .kernels import (
     KernelRecord,
     KernelSeries,
     PackageState,
+    has_non_running_fallback,
     kernel_records,
     kernel_series,
+    removal_would_leave_no_fallback,
     unused_headers,
     unused_kernel_support_packages,
 )
@@ -191,6 +193,14 @@ class KerntopApp(App[None]):
         )
         self.series = kernel_series(self.records)
 
+    def fallback_warning(self) -> str:
+        """Return the persistent warning used when no fallback kernel exists."""
+        if has_non_running_fallback(self.records):
+            return ""
+        return (
+            "\n[bold yellow]WARNING: no non-running fallback kernel is installed.[/]\n"
+        )
+
     def render_series(self) -> None:
         table = self.query_one(DataTable)
         table.clear(columns=True)
@@ -210,11 +220,12 @@ class KerntopApp(App[None]):
             if cleanup_package_count
             else ""
         )
+        fallback_warning = self.fallback_warning()
         self.query_one("#summary", Static).update(
             f"{len(self.series)} kernel series for {self.native_architecture}; "
             f"running: {self.running_release}. "
             f"Showing {'all variants' if self.show_all_variants else 'recommended variants'}. "
-            f"Press Enter to view builds.{header_cleanup}"
+            f"Press Enter to view builds.{fallback_warning}{header_cleanup}"
         )
         self.refresh_bindings()
 
@@ -245,7 +256,7 @@ class KerntopApp(App[None]):
         self.query_one("#summary", Static).update(
             f"Kernel series {series.name}: {len(series.records)} build(s); "
             f"showing {'all variants' if self.show_all_variants else 'recommended variants'}. "
-            "Press Enter for actions."
+            f"Press Enter for actions.{self.fallback_warning()}"
         )
         self.refresh_bindings()
 
@@ -332,7 +343,11 @@ class KerntopApp(App[None]):
     def show_kernel_actions(self, record: KernelRecord) -> None:
         """Open the context-aware action prompt for a kernel build."""
         self.push_screen(
-            KernelActionsScreen(record, self.is_root),
+            KernelActionsScreen(
+                record,
+                self.is_root,
+                removal_would_leave_no_fallback(self.records, record),
+            ),
             self.handle_kernel_action,
         )
 
@@ -547,7 +562,16 @@ class KerntopApp(App[None]):
             self.start_queued_transaction(simulate=True)
         elif action == "apply":
             self.push_screen(
-                QueueApplyConfirmationScreen(self.queued_actions),
+                QueueApplyConfirmationScreen(
+                    self.queued_actions,
+                    any(
+                        queued_action.action is PreviewAction.REMOVE
+                        and removal_would_leave_no_fallback(
+                            self.records, queued_action.record
+                        )
+                        for queued_action in self.queued_actions
+                    ),
+                ),
                 self.handle_queue_apply_confirmation,
             )
 
@@ -655,7 +679,12 @@ class KerntopApp(App[None]):
             )
             return
         self.push_screen(
-            ApplyConfirmationScreen(action, record),
+            ApplyConfirmationScreen(
+                action,
+                record,
+                action in (PreviewAction.REMOVE, PreviewAction.PURGE)
+                and removal_would_leave_no_fallback(self.records, record),
+            ),
             lambda confirmed: self.handle_apply_confirmation(confirmed, action),
         )
 

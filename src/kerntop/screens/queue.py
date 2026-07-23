@@ -53,9 +53,12 @@ class QueueApplyConfirmationScreen(ModalScreen[bool]):
 
     BINDINGS = [("escape", "cancel", "Cancel"), ("q", "cancel", "Cancel")]
 
-    def __init__(self, actions: tuple[QueuedAction, ...]) -> None:
+    def __init__(
+        self, actions: tuple[QueuedAction, ...], removes_final_fallback: bool
+    ) -> None:
         super().__init__()
         self.actions = actions
+        self.removes_final_fallback = removes_final_fallback
 
     def compose(self) -> ComposeResult:
         changes = "\n".join(
@@ -64,8 +67,15 @@ class QueueApplyConfirmationScreen(ModalScreen[bool]):
         )
         with Container(id="action-dialog"):
             yield Static("Apply queued kernel changes", id="dialog-title")
+            warning = (
+                "\n\nWARNING: this removes the final non-running fallback kernel. "
+                "No alternate installed kernel will remain."
+                if self.removes_final_fallback
+                else ""
+            )
             yield Static(
                 f"{changes}\n\nThis will change packages on this host using apt-get."
+                f"{warning}"
             )
             yield OptionList("Cancel", "Apply queued changes", id="queue-confirmation")
             yield Static(

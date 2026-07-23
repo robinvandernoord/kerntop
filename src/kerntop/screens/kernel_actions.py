@@ -26,10 +26,16 @@ class KernelActionsScreen(ModalScreen[KernelAction | None]):
 
     BINDINGS = [("escape", "close", "Close"), ("q", "close", "Close")]
 
-    def __init__(self, record: KernelRecord, can_change_packages: bool) -> None:
+    def __init__(
+        self,
+        record: KernelRecord,
+        can_change_packages: bool,
+        removes_final_fallback: bool,
+    ) -> None:
         super().__init__()
         self.record = record
         self.can_change_packages = can_change_packages
+        self.removes_final_fallback = removes_final_fallback
         if can_change_packages and not record.installed:
             self.actions = (
                 KernelAction("Preview installation", PreviewAction.INSTALL, False),
@@ -66,6 +72,11 @@ class KernelActionsScreen(ModalScreen[KernelAction | None]):
                 "\nPurge also removes that configuration."
                 "\nHeaders and kernel support packages are managed separately.\n"
             )
+            if self.removes_final_fallback:
+                details += (
+                    "\nWARNING: this is the final non-running fallback kernel. "
+                    "Removing it leaves no alternate installed kernel."
+                )
         with Container(id="action-dialog"):
             yield Static("Kernel actions", id="dialog-title")
             yield Static(details)
@@ -96,16 +107,29 @@ class ApplyConfirmationScreen(ModalScreen[bool]):
 
     BINDINGS = [("escape", "cancel", "Cancel"), ("q", "cancel", "Cancel")]
 
-    def __init__(self, action: PreviewAction, record: KernelRecord) -> None:
+    def __init__(
+        self,
+        action: PreviewAction,
+        record: KernelRecord,
+        removes_final_fallback: bool,
+    ) -> None:
         super().__init__()
         self.action = action
         self.record = record
+        self.removes_final_fallback = removes_final_fallback
 
     def compose(self) -> ComposeResult:
         with Container(id="action-dialog"):
             yield Static(f"Confirm {self.action.value}", id="dialog-title")
+            warning = (
+                "\n\nWARNING: this removes the final non-running fallback kernel. "
+                "No alternate installed kernel will remain."
+                if self.removes_final_fallback
+                else ""
+            )
             yield Static(
                 f"{self.record.identifier}\n\nThis will change packages on this host using apt-get."
+                f"{warning}"
             )
             yield OptionList(
                 "Cancel", f"Apply {self.action.value}", id="apply-confirmation"

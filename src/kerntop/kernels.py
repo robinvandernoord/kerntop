@@ -241,3 +241,20 @@ def kernel_series(records: t.Iterable[KernelRecord]) -> tuple[KernelSeries, ...]
 def removal_is_blocked(record: KernelRecord) -> bool:
     """Return whether a record is unsafe to select for removal."""
     return record.running
+
+
+def has_non_running_fallback(records: t.Iterable[KernelRecord]) -> bool:
+    """Return whether an installed kernel other than the running one exists."""
+    return any(record.installed and not record.running for record in records)
+
+
+def removal_would_leave_no_fallback(
+    records: t.Iterable[KernelRecord], record: KernelRecord
+) -> bool:
+    """Return whether removing a record would leave no alternate installed kernel."""
+    return (
+        record.installed
+        and not record.running
+        and sum(candidate.installed and not candidate.running for candidate in records)
+        == 1
+    )

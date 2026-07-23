@@ -2,10 +2,12 @@ from kerntop.kernels import (
     KernelRecord,
     KernelSeries,
     PackageState,
+    has_non_running_fallback,
     is_relevant_image,
     kernel_identifier,
     kernel_series,
     matching_headers,
+    removal_would_leave_no_fallback,
     running_flavour,
 )
 
@@ -49,6 +51,28 @@ def test_relevant_image_matches_generic_kernels_across_abi_revisions() -> None:
     available_generic = package("linux-image-6.8.0-135-generic")
 
     assert is_relevant_image(available_generic, "6.8.0-134-generic") is True
+
+
+def test_fallback_detection_prevents_removing_the_only_alternate_kernel() -> None:
+    running = KernelRecord(
+        "linux-image-6.8.0-134-generic", True, "1.0", "1.0", True, ()
+    )
+    fallback = KernelRecord(
+        "linux-image-6.8.0-135-generic", True, "1.0", "1.0", False, ()
+    )
+    additional_fallback = KernelRecord(
+        "linux-image-6.8.0-136-generic", True, "1.0", "1.0", False, ()
+    )
+
+    assert has_non_running_fallback((running,)) is False
+    assert has_non_running_fallback((running, fallback)) is True
+    assert removal_would_leave_no_fallback((running, fallback), fallback) is True
+    assert (
+        removal_would_leave_no_fallback(
+            (running, fallback, additional_fallback), fallback
+        )
+        is False
+    )
 
 
 def test_relevant_image_selection_covers_flavour_and_all_variant_rules() -> None:
