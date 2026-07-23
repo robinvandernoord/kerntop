@@ -6,6 +6,7 @@ from kerntop.kernels import (
     kernel_identifier,
     kernel_series,
     matching_headers,
+    running_flavour,
 )
 
 
@@ -37,6 +38,17 @@ def test_kernel_identifier_rejects_non_versioned_image_names() -> None:
     assert kernel_identifier("linux-headers-6.12") is None
     assert kernel_identifier("linux-image-") is None
     assert kernel_identifier("linux-image-generic") is None
+
+
+def test_running_flavour_excludes_numeric_abi_revision() -> None:
+    assert running_flavour("7.1.4-pikaos") == "-pikaos"
+    assert running_flavour("6.8.0-134-generic") == "-generic"
+
+
+def test_relevant_image_matches_generic_kernels_across_abi_revisions() -> None:
+    available_generic = package("linux-image-6.8.0-135-generic")
+
+    assert is_relevant_image(available_generic, "6.8.0-134-generic") is True
 
 
 def test_relevant_image_selection_covers_flavour_and_all_variant_rules() -> None:

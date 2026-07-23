@@ -12,7 +12,7 @@ KERNEL_SUPPORT_PREFIXES = (
     "linux-tools-",
     "linux-buildinfo-",
 )
-RELEASE_FLAVOUR_PATTERN = re.compile(r"^\d+(?:\.\d+)+(.*)$")
+RELEASE_FLAVOUR_PATTERN = re.compile(r"^\d+(?:\.\d+)+(?:-\d+)?(.*)$")
 SERIES_PATTERN = re.compile(r"^(\d+\.\d+)")
 
 
