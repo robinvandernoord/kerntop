@@ -74,5 +74,5 @@ def import_apt_modules() -> tuple[ModuleType, ModuleType]:
         raise AptUnavailableError(
             "kerntop needs Debian's python3-apt package, but its apt bindings "
             "could not be imported. Install python3-apt for this system Python "
-            "and use a matching Python 3.12 environment."
+            "and use a matching Python 3.11+ environment."
         ) from error

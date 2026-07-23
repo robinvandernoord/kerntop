@@ -32,7 +32,7 @@ Goal: a tool that specifically fills the kernel-management gap the generic tools
 
 Validate the difficult integrations without making package changes to the host.
 
-- Support Python 3.12+ and build the initial Textual interface for SSH use.
+- Support Python 3.11+ and build the initial Textual interface for SSH use.
 - Load native-architecture image packages and matching header information via
   `python-apt`; show installed packages, candidates from the local apt cache,
   and the running kernel in one navigable view.

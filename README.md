@@ -27,7 +27,7 @@ $ pipx run kerntop
 
 ### Install with pip
 
-Install from PyPI with Python 3.12 or newer:
+Install from PyPI with Python 3.11 or newer:
 
 ```console
 $ pip install kerntop
