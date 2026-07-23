@@ -59,7 +59,8 @@ Validate the difficult integrations without making package changes to the host.
   available counts, then drill into the builds and flavours in that series.
 - Default the hierarchy to recommended images without hard-coding distribution
   flavour names: exclude packages marked as debug and prefer the flavour of the
-  running kernel (such as PikaOS's `-pikaos`).
+  running kernel (such as PikaOS's `-pikaos` or Ubuntu's `-generic` after its
+  numeric ABI revision).
 - Provide an explicit all-variants view for unsigned, cloud, RT, debug, and
   other distribution-specific alternatives, without reloading the apt cache.
 - Pressing Enter on an individual build opens a context-relevant action prompt.
@@ -68,6 +69,8 @@ Validate the difficult integrations without making package changes to the host.
 - In root mode, allow immediate installation of an available image and removal
   of an installed non-running image. Stream the `apt-get` output and reload the
   local package state when the command completes.
+- Warn persistently when no non-running fallback kernel is installed, and
+  repeat that warning before removing the final fallback.
 
 ### Queued transactions
 
@@ -99,9 +102,6 @@ Complete the remaining safety requirements for the manager.
   packages.
 - Add a privileged repository-refresh action using `apt-get update`, followed
   by a reload of the apt cache.
-- Continue to permanently block removal of the running kernel. Display a
-  persistent warning when there is no non-running fallback image, and repeat
-  the warning before removing the final fallback.
 
 ## Future improvements
 

@@ -4,7 +4,7 @@ build-backend = "uv_build"
 
 [project]
 name = "kerntop"
-version = "0.0.6"
+version = "0.0.7"
 description = "A safe terminal UI for managing Linux kernels on apt-based systems"
 readme = "README.md"
 authors = [
