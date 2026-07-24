@@ -584,16 +584,29 @@ class KerntopApp(App[None]):
             self.push_screen(
                 QueueApplyConfirmationScreen(
                     self.queued_actions,
-                    any(
-                        queued_action.action is PreviewAction.REMOVE
-                        and removal_would_leave_no_fallback(
-                            self.records, queued_action.record
-                        )
-                        for queued_action in self.queued_actions
-                    ),
+                    self.queue_would_leave_no_fallback(),
                 ),
                 self.handle_queue_apply_confirmation,
             )
+
+    def queue_would_leave_no_fallback(self) -> bool:
+        """Return whether the queued transaction leaves no fallback installed."""
+        queued_actions = {
+            queued_action.record.package_name: queued_action.action
+            for queued_action in self.queued_actions
+        }
+        return not any(
+            not record.running
+            and (
+                (
+                    record.installed
+                    and queued_actions.get(record.package_name)
+                    is not PreviewAction.REMOVE
+                )
+                or queued_actions.get(record.package_name) is PreviewAction.INSTALL
+            )
+            for record in self.records
+        )
 
     def handle_queue_apply_confirmation(self, confirmed: bool | None) -> None:
         if confirmed:
