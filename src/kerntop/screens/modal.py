@@ -1,5 +1,6 @@
 """Generic modal screens."""
 
+import asyncio
 import typing as t
 
 from textual.app import ComposeResult
@@ -71,13 +72,15 @@ class PreviewOutputScreen(ModalScreen[None]):
         self.on_finished = on_finished
         self.pending_output: list[str] = []
         self.pending_return_code: int | None = None
+        self.interrupt_event = asyncio.Event()
+        self.running = True
 
     def compose(self) -> ComposeResult:
         with Container(id="text-dialog"):
             yield Static(self.dialog_title, id="dialog-title")
             yield Log(auto_scroll=True, id="apt-output")
             yield Static("Running apt-get…", id="apt-status")
-            yield Static("Esc or q closes this view.", id="dialog-help")
+            yield Static("Ctrl-C interrupts apt-get safely.", id="dialog-help")
 
     def write_output(self, line: str) -> None:
         if not self.is_mounted:
@@ -92,6 +95,8 @@ class PreviewOutputScreen(ModalScreen[None]):
         status = self.query_one("#apt-status", Static)
         status.update(f"apt-get finished with exit status {return_code}.")
         status.add_class("success" if return_code == 0 else "failure")
+        self.running = False
+        self.query_one("#dialog-help", Static).update("Esc or q closes this view.")
         if self.on_finished is not None:
             self.on_finished(return_code)
 
@@ -105,4 +110,16 @@ class PreviewOutputScreen(ModalScreen[None]):
             self.finish(return_code)
 
     def action_close(self) -> None:
-        self.dismiss()
+        if not self.running:
+            self.dismiss()
+
+    def request_interrupt(self) -> bool:
+        """Request a graceful interrupt while the command is still running."""
+        if not self.running:
+            return False
+        self.interrupt_event.set()
+        if self.is_mounted:
+            self.query_one("#apt-status", Static).update(
+                "Interrupt requested; waiting for apt-get to finish…"
+            )
+        return True

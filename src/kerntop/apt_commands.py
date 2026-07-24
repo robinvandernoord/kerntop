@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
+import os
+import signal
 import subprocess
 import typing as t
 from dataclasses import dataclass
@@ -41,6 +44,16 @@ class QueuedAction:
     record: KernelRecord
 
 
+def installation_targets(record: KernelRecord) -> tuple[str, ...]:
+    """Return an image and its matching available headers for installation."""
+    headers = tuple(
+        header.name
+        for header in record.headers
+        if not header.installed and header.candidate_version is not None
+    )
+    return (record.package_name, *headers)
+
+
 def preview_command(action: PreviewAction, record: KernelRecord) -> tuple[str, ...]:
     """Build a safe apt-get simulation command for a kernel record."""
     if action in (PreviewAction.REMOVE, PreviewAction.PURGE) and removal_is_blocked(
@@ -49,7 +62,12 @@ def preview_command(action: PreviewAction, record: KernelRecord) -> tuple[str, .
         raise ValueError("The currently running kernel cannot be removed.")
     if action in (PreviewAction.REMOVE, PreviewAction.PURGE) and not record.installed:
         raise ValueError("Only installed kernels can be removed.")
-    return ("apt-get", "--simulate", action.value, record.package_name)
+    targets = (
+        installation_targets(record)
+        if action is PreviewAction.INSTALL
+        else (record.package_name,)
+    )
+    return ("apt-get", "--simulate", action.value, *targets)
 
 
 def run_preview(action: PreviewAction, record: KernelRecord) -> PreviewResult:
@@ -75,11 +93,14 @@ def apply_command(action: PreviewAction, record: KernelRecord) -> tuple[str, ...
         raise ValueError("Only installed kernels can be removed.")
     elif action is PreviewAction.INSTALL and record.installed:
         raise ValueError("This kernel image is already installed.")
-    elif action in (
-        PreviewAction.INSTALL,
-        PreviewAction.REMOVE,
-        PreviewAction.PURGE,
-    ):
+    elif action is PreviewAction.INSTALL:
+        return (
+            "apt-get",
+            "--assume-yes",
+            action.value,
+            *installation_targets(record),
+        )
+    elif action in (PreviewAction.REMOVE, PreviewAction.PURGE):
         return ("apt-get", "--assume-yes", action.value, record.package_name)
     else:
         raise ValueError(f"Unsupported kernel action: {action}")
@@ -115,7 +136,7 @@ def transaction_command(
         elif action is PreviewAction.INSTALL:
             if record.installed:
                 raise ValueError("Installed kernels cannot be queued for installation.")
-            targets.append(record.package_name)
+            targets.extend(installation_targets(record))
         else:
             raise ValueError(f"Unsupported kernel action: {action}")
 
@@ -175,16 +196,37 @@ def support_package_purge_command(
     )
 
 
+async def interrupt_process_group(
+    process: asyncio.subprocess.Process, interrupt_event: asyncio.Event
+) -> None:
+    """Send one graceful interrupt to a process group when requested."""
+    await interrupt_event.wait()
+    with contextlib.suppress(ProcessLookupError):
+        os.killpg(process.pid, signal.SIGINT)
+
+
 async def stream_command(
-    command: tuple[str, ...], write_line: t.Callable[[str], None]
+    command: tuple[str, ...],
+    write_line: t.Callable[[str], None],
+    interrupt_event: asyncio.Event | None = None,
 ) -> int:
-    """Run an apt command and send its combined output to ``write_line``."""
+    """Run an apt command, retaining streamed output through interruption."""
     process = await asyncio.create_subprocess_exec(
         *command,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.STDOUT,
+        start_new_session=True,
     )
     assert process.stdout is not None
-    while line := await process.stdout.readline():
+    interrupt_task = (
+        asyncio.create_task(interrupt_process_group(process, interrupt_event))
+        if interrupt_event is not None
+        else None
+    )
+    async for line in process.stdout:
         write_line(line.decode(errors="replace").rstrip("\n"))
+    if interrupt_task is not None:
+        interrupt_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await interrupt_task
     return await process.wait()

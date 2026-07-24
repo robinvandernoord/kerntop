@@ -66,9 +66,11 @@ Validate the difficult integrations without making package changes to the host.
 - Pressing Enter on an individual build opens a context-relevant action prompt.
   It offers only valid preview actions and explains when the running kernel
   cannot be removed.
-- In root mode, allow immediate installation of an available image and removal
-  of an installed non-running image. Stream the `apt-get` output and reload the
-  local package state when the command completes.
+- In root mode, allow immediate installation of an available image and matching
+  available headers, plus removal of an installed non-running image. Stream the
+  `apt-get` output and reload the local package state when the command completes.
+- Interrupt running `apt-get` child processes safely while preserving streamed
+  output and the final exit status.
 - Warn persistently when no non-running fallback kernel is installed, and
   repeat that warning before removing the final fallback.
 
@@ -95,11 +97,6 @@ Validate the difficult integrations without making package changes to the host.
 
 Complete the remaining safety requirements for the manager.
 
-- Interrupt running `apt-get` child processes safely while preserving their
-  streamed output and final exit status.
-- Select versioned kernel image packages as the primary targets and include
-  matching available headers for installation. Continue to protect meta
-  packages.
 - Add a privileged repository-refresh action using `apt-get update`, followed
   by a reload of the apt cache.
 

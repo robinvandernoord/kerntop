@@ -147,7 +147,12 @@ class KerntopApp(App[None]):
         self.run_worker(self.load_state(), group="load-state", exclusive=True)
 
     def action_interrupt_quit(self) -> None:
-        """Exit immediately when the terminal sends an interrupt."""
+        """Interrupt apt-get when it is active; otherwise exit the application."""
+        if (
+            isinstance(self.screen, PreviewOutputScreen)
+            and self.screen.request_interrupt()
+        ):
+            return
         self.exit()
 
     def on_key(self, event: events.Key) -> None:
@@ -335,13 +340,7 @@ class KerntopApp(App[None]):
         elif action == "view_queue":
             return self.is_root and bool(self.queued_actions)
         elif action == "header_cleanup":
-            return (
-                self.is_root
-                and self.active_series is None
-                and bool(
-                    self.unused_header_packages or self.unused_kernel_support_packages
-                )
-            )
+            return self.is_root and self.active_series is None
         return True
 
     def on_data_table_row_highlighted(self, _event: DataTable.RowHighlighted) -> None:
@@ -544,8 +543,7 @@ class KerntopApp(App[None]):
         )
 
     def handle_header_purge_finished(self, return_code: int) -> None:
-        if return_code == 0:
-            self.action_reload()
+        self.action_reload()
 
     async def purge_headers(self, screen: PreviewOutputScreen, simulate: bool) -> None:
         """Run the explicit header purge and stream its apt output."""
@@ -558,7 +556,13 @@ class KerntopApp(App[None]):
             self.notify(str(error), severity="error")
             return
         screen.write_output(f"$ {' '.join(command)}")
-        screen.finish(await stream_command(command, screen.write_output))
+        screen.finish(
+            await stream_command(
+                command,
+                screen.write_output,
+                interrupt_event=screen.interrupt_event,
+            )
+        )
 
     def handle_kernel_support_purge_confirmation(self, confirmed: bool | None) -> None:
         if confirmed:
@@ -579,8 +583,7 @@ class KerntopApp(App[None]):
         )
 
     def handle_kernel_support_purge_finished(self, return_code: int) -> None:
-        if return_code == 0:
-            self.action_reload()
+        self.action_reload()
 
     async def purge_kernel_support_packages(
         self, screen: PreviewOutputScreen, simulate: bool
@@ -595,7 +598,13 @@ class KerntopApp(App[None]):
             self.notify(str(error), severity="error")
             return
         screen.write_output(f"$ {' '.join(command)}")
-        screen.finish(await stream_command(command, screen.write_output))
+        screen.finish(
+            await stream_command(
+                command,
+                screen.write_output,
+                interrupt_event=screen.interrupt_event,
+            )
+        )
 
     def handle_queue_action(self, action: str | None) -> None:
         if action == "clear":
@@ -651,7 +660,7 @@ class KerntopApp(App[None]):
     def handle_queue_apply_finished(self, return_code: int) -> None:
         if return_code == 0:
             self.queued_actions = ()
-            self.action_reload()
+        self.action_reload()
         self.refresh_bindings()
 
     async def run_queued_transaction(
@@ -664,7 +673,13 @@ class KerntopApp(App[None]):
             self.notify(str(error), severity="error")
             return
         screen.write_output(f"$ {' '.join(command)}")
-        screen.finish(await stream_command(command, screen.write_output))
+        screen.finish(
+            await stream_command(
+                command,
+                screen.write_output,
+                interrupt_event=screen.interrupt_event,
+            )
+        )
 
     def start_preview(self, action: PreviewAction) -> None:
         if not self.is_root:
@@ -699,7 +714,13 @@ class KerntopApp(App[None]):
             self.notify(str(error), severity="error")
             return
         screen.write_output(f"$ {' '.join(command)}")
-        screen.finish(await stream_command(command, screen.write_output))
+        screen.finish(
+            await stream_command(
+                command,
+                screen.write_output,
+                interrupt_event=screen.interrupt_event,
+            )
+        )
 
     def start_apply(self, action: PreviewAction) -> None:
         """Run a single immediate install or removal from the action popup."""
@@ -768,7 +789,13 @@ class KerntopApp(App[None]):
             self.notify(str(error), severity="error")
             return
         screen.write_output(f"$ {' '.join(command)}")
-        screen.finish(await stream_command(command, screen.write_output))
+        screen.finish(
+            await stream_command(
+                command,
+                screen.write_output,
+                interrupt_event=screen.interrupt_event,
+            )
+        )
         self.action_reload()
 
     def action_show_help(self) -> None:
