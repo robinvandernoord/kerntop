@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.2 (2026-07-24)
+
+### Fixes
+
+- Recommended kernel images consistently follow the running kernel's flavour.
+- Kernel series are sorted numerically by major and minor version.
+
 ## 0.1.1 (2026-07-24)
 
 ### Fixes
