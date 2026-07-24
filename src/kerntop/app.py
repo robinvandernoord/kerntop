@@ -1,6 +1,7 @@
 """Textual interface for the kerntop proof of concept."""
 
 import asyncio
+import importlib.metadata
 import os
 import typing as t
 
@@ -45,6 +46,9 @@ from .screens.modal import (
     TextScreen,
 )
 from .screens.queue import QueueApplyConfirmationScreen, QueueScreen
+
+
+__version__ = importlib.metadata.version("kerntop")
 
 
 def pluralize(word: str, count: int, plural: str | None = None) -> str:
@@ -847,7 +851,7 @@ class KerntopApp(App[None]):
     def action_show_help(self) -> None:
         self.push_screen(
             TextScreen(
-                "kerntop 0.1.0 - safe kernel management for apt-based systems",
+                f"kerntop {__version__} - safe kernel management for apt-based systems",
                 "Arrow keys: choose a row\n"
                 "Enter: open the selected item\n"
                 "Esc or Left: return to the series list; press Esc twice there to quit\n"
