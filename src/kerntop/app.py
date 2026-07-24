@@ -847,7 +847,7 @@ class KerntopApp(App[None]):
     def action_show_help(self) -> None:
         self.push_screen(
             TextScreen(
-                "kerntop 0.1.0 minimum viable manager",
+                "kerntop 0.1.0 - safe kernel management for apt-based systems",
                 "Arrow keys: choose a row\n"
                 "Enter: open the selected item\n"
                 "Esc or Left: return to the series list; press Esc twice there to quit\n"

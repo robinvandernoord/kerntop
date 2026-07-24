@@ -4,22 +4,26 @@ build-backend = "uv_build"
 
 [project]
 name = "kerntop"
-version = "0.0.8"
+version = "0.1.0"
 description = "A safe terminal UI for managing Linux kernels on apt-based systems"
 readme = "README.md"
+license = "MIT"
+keywords = ["apt", "debian", "kernel", "linux", "terminal", "tui", "ubuntu"]
 authors = [
     { name = "Robin van der Noord", email = "robinvandernoord@gmail.com" }
 ]
 requires-python = ">=3.11"
 classifiers = [
-    "Development Status :: 2 - Pre-Alpha",
+    "Development Status :: 4 - Beta",
     "Environment :: Console",
     "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: MIT License",
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3 :: Only",
     "Programming Language :: Python :: 3.11",
     "Topic :: System :: Systems Administration",
     "Topic :: Terminals",
+    "Topic :: Utilities",
 ]
 dependencies = [
     "textual>=0.80.0",

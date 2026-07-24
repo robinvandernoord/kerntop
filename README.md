@@ -1,17 +1,17 @@
 # kerntop
 
-`kerntop` is a terminal user interface for inspecting and managing Linux kernel
-packages on Debian- and Ubuntu-based systems. It is designed for servers and
-SSH sessions: no graphical desktop or graphical libraries are required.
+`kerntop` is a safe terminal user interface for managing Linux kernel packages
+on Debian- and Ubuntu-based systems. It is designed for servers and SSH
+sessions: no graphical desktop or graphical libraries are required.
 
 It presents installed and repository-available kernels in an ncdu-style
-browser, marks the running kernel, and keeps kernel meta packages out of
-package actions.
+browser, marks and protects the running kernel, and keeps kernel meta packages
+out of package actions.
 
 > [!WARNING]
-> `kerntop` 0.0.8 is an early release. It can run real `apt-get` transactions
-> when started as root; from a read-only session, press `e` to restart through
-> `sudo`. Read the confirmation dialog and preview a transaction before
+> kerntop can run real `apt-get` transactions when started as root. From a
+> read-only session, press `e` to restart through `sudo`. Read the confirmation
+> dialog and preview a transaction before
 > applying it.
 
 ## Install
@@ -34,8 +34,10 @@ Install from PyPI with Python 3.11 or newer:
 $ pip install kerntop
 ```
 
+### System prerequisite
+
 `kerntop` uses Debian's `python3-apt` bindings to read package state. Install
-that distribution package if it is not already present:
+the distribution package if it is not already present:
 
 ```console
 $ sudo apt-get install python3-apt
@@ -68,11 +70,16 @@ Use the arrow keys and Enter to browse kernel series and builds. Press `h` in
 the application for the complete key reference. The primary actions are:
 
 - `a` toggles the recommended and all-variants views.
-- `p` previews the contextual install or removal with `apt-get --simulate`.
-- `q` queues a contextual install or removal for one combined transaction.
-- `i` installs an available kernel image after confirmation.
-- `d` removes an installed, non-running kernel image after confirmation.
-- `u` reviews unused versioned headers and kernel-support packages.
+- `p` previews the contextual install or removal with `apt-get --simulate` in
+  root mode.
+- `q` queues a contextual install or removal for one combined transaction in
+  root mode.
+- `c` reviews, simulates, applies, or clears queued package actions.
+- `i` installs an available kernel image after confirmation in root mode.
+- `d` removes an installed, non-running kernel image after confirmation in
+  root mode.
+- `u` reviews unused versioned development headers and kernel-support packages
+  from the main browser.
 - `e` restarts kerntop with `sudo` from a read-only session.
 - `r` refreshes repository indexes and reloads the cache in root mode; it only
   reloads the local cache in a read-only session.
@@ -85,12 +92,19 @@ the application for the complete key reference. The primary actions are:
 - Kernel meta packages are protected and are never package-action targets.
 - Package changes require root; unprivileged sessions are read-only.
 - Queued changes can be simulated before their final confirmation.
+- Removal and purge actions require explicit confirmation.
 - Header and kernel-support cleanup lists explicit packages and never runs
   `autoremove` automatically.
 
 ## Scope and current limitations
 
-The local apt cache supplies the available-kernel view and can be refreshed on
-demand in root mode. Kernel images are installed as image packages, while
-headers and support packages are handled separately. See [PLAN.md](PLAN.md) for
-future improvements.
+kerntop supports apt-based Debian- and Ubuntu-based systems. It deliberately
+has a narrow scope:
+
+- It requires the distribution-provided `python3-apt` binding.
+- The available-kernel view comes from the local apt cache. Refresh repository
+  indexes with `r` in root mode when that cache is stale.
+- Kernel installation targets image packages. Headers and kernel-support
+  packages are handled through their separate cleanup workflow.
+- Package previews, queues, and changes require root mode.
+- It never runs `autoremove` automatically.
