@@ -1,0 +1,19 @@
+# Changelog
+
+## 0.1.1 (2026-07-24)
+
+### Fixes
+
+- `kerntop --help` now opens the in-app Help screen directly.
+- The Help screen displays the installed package version.
+- Recommended kernel images follow installed kernel image meta-package
+  dependencies when available, including unsigned Ubuntu image variants.
+
+## 0.1.0 (2026-07-24)
+
+### Features
+
+- Added a safe terminal interface for reviewing, installing, and removing
+  kernels on apt-based systems.
+- Added package previews, queued actions, kernel safety checks, and explicit
+  cleanup for unused headers and kernel-support packages.
