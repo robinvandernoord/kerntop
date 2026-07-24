@@ -13,6 +13,7 @@ from .kernels import (
     KERNEL_SUPPORT_PREFIXES,
     KernelRecord,
     PackageState,
+    is_kernel_meta_package,
     kernel_records,
 )
 
@@ -25,6 +26,16 @@ class KernelState:
     running_release: str
     packages: tuple[PackageState, ...]
     records: tuple[KernelRecord, ...]
+
+
+def dependency_names(version: t.Any) -> tuple[str, ...]:
+    """Return direct image-relevant dependency targets from an apt version."""
+    names = []
+    for dependency in version.dependencies:
+        if dependency.rawtype not in {"Depends", "PreDepends"}:
+            continue
+        names.extend(candidate.name for candidate in dependency.or_dependencies)
+    return tuple(names)
 
 
 def package_states(cache: t.Iterable[t.Any]) -> tuple[PackageState, ...]:
@@ -48,6 +59,11 @@ def package_states(cache: t.Iterable[t.Any]) -> tuple[PackageState, ...]:
                 installed_version=installed.version if installed else None,
                 candidate_version=candidate.version if candidate else None,
                 section=candidate.section if candidate else installed.section,
+                dependency_names=(
+                    dependency_names(version)
+                    if is_kernel_meta_package(package.name)
+                    else ()
+                ),
             )
         )
     return tuple(states)
