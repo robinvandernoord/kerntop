@@ -160,7 +160,6 @@ def test_kernel_series_groups_sorts_and_counts_records() -> None:
     )
 
     assert series == (
-        KernelSeries("6.9", (record("linux-image-6.9.0-1-generic", installed=True),)),
         KernelSeries(
             "6.12",
             (
@@ -168,6 +167,19 @@ def test_kernel_series_groups_sorts_and_counts_records() -> None:
                 record("linux-image-6.12.1-1-generic", installed=False),
             ),
         ),
+        KernelSeries("6.9", (record("linux-image-6.9.0-1-generic", installed=True),)),
     )
-    assert series[1].installed_count == 1
-    assert series[1].available_count == 1
+    assert series[0].installed_count == 1
+    assert series[0].available_count == 1
+
+
+def test_kernel_series_sorts_major_minor_versions_numerically() -> None:
+    series = kernel_series(
+        (
+            record("linux-image-7.0.0-1-generic", installed=True),
+            record("linux-image-6.8.0-1-generic", installed=True),
+            record("linux-image-6.17.0-1-generic", installed=True),
+        )
+    )
+
+    assert [item.name for item in series] == ["7.0", "6.17", "6.8"]

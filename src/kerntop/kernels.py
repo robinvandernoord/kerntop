@@ -18,6 +18,11 @@ RELEASE_FLAVOUR_PATTERN = re.compile(r"^\d+(?:\.\d+)+(?:-\d+)?(.*)$")
 SERIES_PATTERN = re.compile(r"^(\d+\.\d+)")
 
 
+def version_sort_key(version: str) -> tuple[int, ...]:
+    """Return a numeric sort key for a dotted version string."""
+    return tuple(int(component) for component in version.split("."))
+
+
 @dataclass(frozen=True)
 class PackageState:
     """The package information kerntop needs from python-apt."""
@@ -236,7 +241,9 @@ def kernel_series(records: t.Iterable[KernelRecord]) -> tuple[KernelSeries, ...]
         grouped.setdefault(match.group(1), []).append(record)
     return tuple(
         KernelSeries(name, tuple(series_records))
-        for name, series_records in sorted(grouped.items(), reverse=True)
+        for name, series_records in sorted(
+            grouped.items(), key=lambda item: version_sort_key(item[0]), reverse=True
+        )
     )
 
 
