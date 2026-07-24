@@ -1,4 +1,4 @@
-"""Construction and execution of non-mutating apt-get previews."""
+"""Construction and execution of apt-get commands."""
 
 from __future__ import annotations
 
@@ -42,6 +42,11 @@ class QueuedAction:
 
     action: PreviewAction
     record: KernelRecord
+
+
+def refresh_command() -> tuple[str, ...]:
+    """Build the command that refreshes configured apt repositories."""
+    return ("apt-get", "update")
 
 
 def installation_targets(record: KernelRecord) -> tuple[str, ...]:

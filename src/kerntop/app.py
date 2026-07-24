@@ -15,6 +15,7 @@ from .apt_commands import (
     apply_command,
     header_purge_command,
     preview_command,
+    refresh_command,
     stream_command,
     support_package_purge_command,
     transaction_command,
@@ -141,10 +142,42 @@ class KerntopApp(App[None]):
                 "Read-only mode: press e to restart kerntop with sudo for package actions."
             )
             mode.add_class("read-only")
-        self.action_reload()
+        self.reload_local_cache()
 
     def action_reload(self) -> None:
+        """Refresh repository indexes in root mode, then reload package state."""
+        if not self.is_root:
+            self.notify(
+                "Repository refresh requires root; reloading the local apt cache.",
+                severity="warning",
+            )
+            self.reload_local_cache()
+            return
+        screen = PreviewOutputScreen("Refreshing apt repositories")
+        self.push_screen(screen)
+        self.run_worker(
+            self.refresh_repositories(screen),
+            group="repository-refresh",
+            exclusive=True,
+        )
+
+    def reload_local_cache(self) -> None:
+        """Reload state from the currently available local apt package lists."""
         self.run_worker(self.load_state(), group="load-state", exclusive=True)
+
+    async def refresh_repositories(self, screen: PreviewOutputScreen) -> None:
+        """Refresh apt repository indexes, then reload the local apt cache."""
+        command = refresh_command()
+        screen.write_output(f"$ {' '.join(command)}")
+        return_code = await stream_command(
+            command,
+            screen.write_output,
+            interrupt_event=screen.interrupt_event,
+        )
+        screen.finish(return_code)
+        self.reload_local_cache()
+        if return_code == 0:
+            screen.dismiss()
 
     def action_interrupt_quit(self) -> None:
         """Interrupt apt-get when it is active; otherwise exit the application."""
@@ -543,7 +576,7 @@ class KerntopApp(App[None]):
         )
 
     def handle_header_purge_finished(self, return_code: int) -> None:
-        self.action_reload()
+        self.reload_local_cache()
 
     async def purge_headers(self, screen: PreviewOutputScreen, simulate: bool) -> None:
         """Run the explicit header purge and stream its apt output."""
@@ -583,7 +616,7 @@ class KerntopApp(App[None]):
         )
 
     def handle_kernel_support_purge_finished(self, return_code: int) -> None:
-        self.action_reload()
+        self.reload_local_cache()
 
     async def purge_kernel_support_packages(
         self, screen: PreviewOutputScreen, simulate: bool
@@ -660,7 +693,7 @@ class KerntopApp(App[None]):
     def handle_queue_apply_finished(self, return_code: int) -> None:
         if return_code == 0:
             self.queued_actions = ()
-        self.action_reload()
+        self.reload_local_cache()
         self.refresh_bindings()
 
     async def run_queued_transaction(
@@ -796,7 +829,7 @@ class KerntopApp(App[None]):
                 interrupt_event=screen.interrupt_event,
             )
         )
-        self.action_reload()
+        self.reload_local_cache()
 
     def action_show_help(self) -> None:
         self.push_screen(
@@ -813,7 +846,8 @@ class KerntopApp(App[None]):
                 "c: review queued package actions\n"
                 "u: review unused development headers (main browser only)\n"
                 "e: restart kerntop with sudo\n"
-                "r: reload the local apt cache\n\n"
+                "r: refresh apt repositories and reload the cache in root mode; "
+                "reload the local cache otherwise\n\n"
                 "Install and remove actions require root mode and run immediately. "
                 "Queued actions can be previewed before their final confirmation.",
             )

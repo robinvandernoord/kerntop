@@ -74,6 +74,8 @@ the application for the complete key reference. The primary actions are:
 - `d` removes an installed, non-running kernel image after confirmation.
 - `u` reviews unused versioned headers and kernel-support packages.
 - `e` restarts kerntop with `sudo` from a read-only session.
+- `r` refreshes repository indexes and reloads the cache in root mode; it only
+  reloads the local cache in a read-only session.
 
 ## Safety model
 
@@ -88,7 +90,7 @@ the application for the complete key reference. The primary actions are:
 
 ## Scope and current limitations
 
-The local apt cache supplies the available-kernel view; 0.0.8 does not refresh
-repository indexes itself. Kernel images are installed as image packages, while
+The local apt cache supplies the available-kernel view and can be refreshed on
+demand in root mode. Kernel images are installed as image packages, while
 headers and support packages are handled separately. See [PLAN.md](PLAN.md) for
-the remaining MVP safety work.
+future improvements.

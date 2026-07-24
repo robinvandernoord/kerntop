@@ -93,13 +93,6 @@ Validate the difficult integrations without making package changes to the host.
   simulate before an explicitly confirmed `apt-get purge`, and never run
   autoremove automatically.
 
-## MVP TODO
-
-Complete the remaining safety requirements for the manager.
-
-- Add a privileged repository-refresh action using `apt-get update`, followed
-  by a reload of the apt cache.
-
 ## Future improvements
 
 - Use relevant image meta-package relationships, where available, to refine the
