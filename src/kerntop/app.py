@@ -47,7 +47,6 @@ from .screens.modal import (
 )
 from .screens.queue import QueueApplyConfirmationScreen, QueueScreen
 
-
 __version__ = importlib.metadata.version("kerntop")
 
 
@@ -114,8 +113,9 @@ class KerntopApp(App[None]):
         Binding("left", "return_to_series", show=False),
     ]
 
-    def __init__(self) -> None:
+    def __init__(self, show_help_on_start: bool = False) -> None:
         super().__init__()
+        self.show_help_on_start = show_help_on_start
         self.records: tuple[KernelRecord, ...] = ()
         self.packages: tuple[PackageState, ...] = ()
         self.series: tuple[KernelSeries, ...] = ()
@@ -155,6 +155,8 @@ class KerntopApp(App[None]):
             )
             mode.add_class("read-only")
         self.reload_local_cache()
+        if self.show_help_on_start:
+            self.action_show_help()
 
     def action_reload(self) -> None:
         """Refresh repository indexes in root mode, then reload package state."""

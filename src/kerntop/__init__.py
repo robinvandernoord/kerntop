@@ -8,7 +8,7 @@ from .app import KerntopApp
 
 def main() -> None:
     """Run the kerntop terminal interface."""
-    app = KerntopApp()
+    app = KerntopApp(show_help_on_start="--help" in sys.argv[1:])
     app.run()
     if app.elevate_on_exit:
         os.execvp(
