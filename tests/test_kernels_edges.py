@@ -5,10 +5,8 @@ from kerntop.kernels import (
     has_non_running_fallback,
     is_relevant_image,
     kernel_identifier,
-    kernel_records,
     kernel_series,
     matching_headers,
-    meta_package_image_names,
     removal_would_leave_no_fallback,
     running_flavour,
     unused_headers,
@@ -17,10 +15,7 @@ from kerntop.kernels import (
 
 
 def package(
-    name: str,
-    installed: bool = False,
-    section: str = "kernel",
-    dependency_names: tuple[str, ...] = (),
+    name: str, *, installed: bool = False, section: str = "kernel"
 ) -> PackageState:
     return PackageState(
         name=name,
@@ -29,7 +24,6 @@ def package(
         installed_version="1.0" if installed else None,
         candidate_version="1.0",
         section=section,
-        dependency_names=dependency_names,
     )
 
 
@@ -177,69 +171,3 @@ def test_kernel_series_groups_sorts_and_counts_records() -> None:
     )
     assert series[1].installed_count == 1
     assert series[1].available_count == 1
-
-
-def test_meta_package_image_names_extracts_versioned_dependency_targets() -> None:
-    meta = package(
-        "linux-image-generic",
-        installed=True,
-        dependency_names=("linux-image-6.14.0-15-generic", "initramfs-tools"),
-    )
-    uninstalled_meta = package(
-        "linux-image-cloud",
-        installed=False,
-        dependency_names=("linux-image-6.14.0-15-cloud",),
-    )
-    foreign_meta = PackageState(
-        "linux-image-generic",
-        "arm64",
-        True,
-        "1.0",
-        "1.0",
-        dependency_names=("linux-image-6.14.0-15-generic-arm64",),
-    )
-
-    assert meta_package_image_names(
-        (meta, uninstalled_meta, foreign_meta), "amd64"
-    ) == {"linux-image-6.14.0-15-generic"}
-
-
-def test_relevant_image_prefers_meta_package_recommendation_over_flavour() -> None:
-    recommended = package("linux-image-6.14.0-15-generic")
-    older_matching_flavour = package("linux-image-6.13.0-1-generic")
-    names = frozenset({"linux-image-6.14.0-15-generic"})
-
-    assert (
-        is_relevant_image(
-            recommended, "6.13.0-1-generic", recommended_image_names=names
-        )
-        is True
-    )
-    assert (
-        is_relevant_image(
-            older_matching_flavour,
-            "6.13.0-1-generic",
-            recommended_image_names=names,
-        )
-        is False
-    )
-
-
-def test_kernel_records_use_meta_package_dependency_as_recommendation() -> None:
-    records = kernel_records(
-        (
-            package(
-                "linux-image-generic",
-                installed=True,
-                dependency_names=("linux-image-6.14.0-15-generic",),
-            ),
-            package("linux-image-6.14.0-15-generic"),
-            package("linux-image-6.13.0-1-generic"),
-        ),
-        "amd64",
-        "6.13.0-1-generic",
-    )
-
-    assert [record.package_name for record in records] == [
-        "linux-image-6.14.0-15-generic",
-    ]

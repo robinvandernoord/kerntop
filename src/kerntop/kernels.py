@@ -28,7 +28,6 @@ class PackageState:
     installed_version: str | None
     candidate_version: str | None
     section: str | None = None
-    dependency_names: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -98,7 +97,6 @@ def is_relevant_image(
     package: PackageState,
     running_release: str,
     include_all_variants: bool = False,
-    recommended_image_names: frozenset[str] = frozenset(),
 ) -> bool:
     """Select default recommended images or every versioned image variant."""
     identifier = kernel_identifier(package.name)
@@ -112,28 +110,9 @@ def is_relevant_image(
         return True
     elif package.name.startswith(UNSIGNED_IMAGE_PREFIX):
         return False
-    elif recommended_image_names:
-        return package.name in recommended_image_names
     else:
         flavour = running_flavour(running_release)
         return not flavour or identifier.endswith(flavour)
-
-
-def meta_package_image_names(
-    packages: t.Iterable[PackageState], native_architecture: str
-) -> frozenset[str]:
-    """Return versioned image targets selected by installed image meta packages."""
-    return frozenset(
-        dependency_name
-        for package in packages
-        if (
-            package.architecture == native_architecture
-            and package.installed
-            and is_kernel_meta_package(package.name)
-        )
-        for dependency_name in package.dependency_names
-        if kernel_identifier(dependency_name) is not None
-    )
 
 
 def matching_headers(
@@ -224,16 +203,12 @@ def kernel_records(
     native_packages = tuple(
         package for package in packages if package.architecture == native_architecture
     )
-    recommended_image_names = meta_package_image_names(
-        native_packages, native_architecture
-    )
     records = []
     for package in native_packages:
         if not is_relevant_image(
             package,
             running_release,
             include_all_variants=include_all_variants,
-            recommended_image_names=recommended_image_names,
         ):
             continue
         if not package.installed and package.candidate_version is None:

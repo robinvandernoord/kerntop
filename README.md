@@ -104,8 +104,9 @@ has a narrow scope:
 - It requires the distribution-provided `python3-apt` binding.
 - The available-kernel view comes from the local apt cache. Refresh repository
   indexes with `r` in root mode when that cache is stale.
-- Recommended variants follow installed kernel image meta-package dependencies
-  when available, falling back to the running kernel's flavour.
+- Recommended variants follow the running kernel's flavour. We deliberately do
+  not use installed meta-package dependencies because they only select their
+  current targets and can hide other available kernels of the same flavour.
 - Kernel installation targets image packages. Headers and kernel-support
   packages are handled through their separate cleanup workflow.
 - Package previews, queues, and changes require root mode.
