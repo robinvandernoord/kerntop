@@ -5,6 +5,8 @@ import typing as t
 from dataclasses import dataclass
 
 IMAGE_PREFIX = "linux-image-"
+UNSIGNED_IMAGE_PREFIX = "linux-image-unsigned-"
+IMAGE_PREFIXES = (UNSIGNED_IMAGE_PREFIX, IMAGE_PREFIX)
 HEADER_PREFIX = "linux-headers-"
 KERNEL_SUPPORT_PREFIXES = (
     "linux-modules-extra-",
@@ -42,7 +44,7 @@ class KernelRecord:
     @property
     def identifier(self) -> str:
         """Return the ABI/flavour portion of the image package name."""
-        return self.package_name.removeprefix(IMAGE_PREFIX)
+        return kernel_identifier(self.package_name) or self.package_name
 
 
 @dataclass(frozen=True)
@@ -65,12 +67,11 @@ class KernelSeries:
 
 def kernel_identifier(package_name: str) -> str | None:
     """Return a versioned image identifier, excluding kernel meta packages."""
-    if not package_name.startswith(IMAGE_PREFIX):
-        return None
-    identifier = package_name.removeprefix(IMAGE_PREFIX)
-    if not identifier or not identifier[0].isdigit():
-        return None
-    return identifier
+    for prefix in IMAGE_PREFIXES:
+        if package_name.startswith(prefix):
+            identifier = package_name.removeprefix(prefix)
+            return identifier if identifier[:1].isdigit() else None
+    return None
 
 
 def is_kernel_meta_package(package_name: str) -> bool:
@@ -107,6 +108,8 @@ def is_relevant_image(
         return False
     elif package.installed:
         return True
+    elif package.name.startswith(UNSIGNED_IMAGE_PREFIX):
+        return False
     else:
         flavour = running_flavour(running_release)
         return not flavour or identifier.endswith(flavour)
@@ -200,7 +203,6 @@ def kernel_records(
     native_packages = tuple(
         package for package in packages if package.architecture == native_architecture
     )
-    running_package = running_image_package(running_release)
     records = []
     for package in native_packages:
         if not is_relevant_image(
@@ -217,7 +219,7 @@ def kernel_records(
                 installed=package.installed,
                 installed_version=package.installed_version,
                 candidate_version=package.candidate_version,
-                running=package.name == running_package,
+                running=kernel_identifier(package.name) == running_release,
                 headers=matching_headers(package.name, native_packages),
             )
         )

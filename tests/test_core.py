@@ -77,6 +77,40 @@ def test_kernel_records_prefer_running_flavour_and_hide_debug_images() -> None:
     ]
 
 
+def test_kernel_records_include_ubuntu_unsigned_images_in_all_variants() -> None:
+    packages = (
+        package("linux-image-6.8.0-85-generic"),
+        package("linux-image-unsigned-6.8.0-85-generic"),
+    )
+
+    recommended_records = kernel_records(packages, "amd64", "6.8.0-84-generic")
+    all_variant_records = kernel_records(
+        packages,
+        "amd64",
+        "6.8.0-84-generic",
+        include_all_variants=True,
+    )
+
+    assert [record.package_name for record in recommended_records] == [
+        "linux-image-6.8.0-85-generic"
+    ]
+    assert [record.package_name for record in all_variant_records] == [
+        "linux-image-6.8.0-85-generic",
+        "linux-image-unsigned-6.8.0-85-generic",
+    ]
+    assert all_variant_records[1].identifier == "6.8.0-85-generic"
+
+
+def test_kernel_records_mark_an_unsigned_running_image_as_protected() -> None:
+    records = kernel_records(
+        (package("linux-image-unsigned-6.8.0-85-generic", installed=True),),
+        "amd64",
+        "6.8.0-85-generic",
+    )
+
+    assert records[0].running is True
+
+
 def test_running_kernel_cannot_be_previewed_for_removal() -> None:
     record = KernelRecord(
         "linux-image-6.12.0-1-generic",

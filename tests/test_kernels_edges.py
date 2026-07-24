@@ -9,6 +9,8 @@ from kerntop.kernels import (
     matching_headers,
     removal_would_leave_no_fallback,
     running_flavour,
+    unused_headers,
+    unused_kernel_support_packages,
 )
 
 
@@ -99,6 +101,52 @@ def test_matching_headers_rejects_meta_packages_and_matches_by_identifier() -> N
 
     assert matching_headers("linux-image-generic", headers) == ()
     assert matching_headers("linux-image-6.12.0-1-generic", headers) == headers[:2]
+
+
+def test_unused_headers_excludes_packages_belonging_to_installed_images() -> None:
+    installed_image = package("linux-image-6.8.0-1-generic", installed=True)
+    matching_header = package("linux-headers-6.8.0-1-generic", installed=True)
+    unused_header = package("linux-headers-6.7.0-1-generic", installed=True)
+    uninstalled_header = package("linux-headers-6.6.0-1-generic")
+    foreign_header = PackageState(
+        "linux-headers-6.5.0-1-generic", "arm64", True, "1.0", "1.0"
+    )
+
+    assert unused_headers(
+        (
+            installed_image,
+            matching_header,
+            unused_header,
+            uninstalled_header,
+            foreign_header,
+            package("linux-headers-generic", installed=True),
+        ),
+        "amd64",
+    ) == (unused_header,)
+
+
+def test_unused_kernel_support_packages_excludes_installed_image_dependencies() -> None:
+    installed_image = package("linux-image-6.8.0-1-generic", installed=True)
+    matching_modules = package("linux-modules-6.8.0-1-generic", installed=True)
+    unused_modules = package("linux-modules-6.7.0-1-generic", installed=True)
+    unused_extra = package("linux-modules-extra-6.6.0-1-generic", installed=True)
+    uninstalled_tools = package("linux-tools-6.5.0-1-generic")
+    foreign_buildinfo = PackageState(
+        "linux-buildinfo-6.4.0-1-generic", "arm64", True, "1.0", "1.0"
+    )
+
+    assert unused_kernel_support_packages(
+        (
+            installed_image,
+            matching_modules,
+            unused_modules,
+            unused_extra,
+            uninstalled_tools,
+            foreign_buildinfo,
+            package("linux-tools-generic", installed=True),
+        ),
+        "amd64",
+    ) == (unused_extra, unused_modules)
 
 
 def test_kernel_series_groups_sorts_and_counts_records() -> None:
