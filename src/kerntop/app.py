@@ -37,7 +37,11 @@ from .screens.kernel_actions import (
     KernelAction,
     KernelActionsScreen,
 )
-from .screens.modal import PreviewOutputScreen, TextScreen
+from .screens.modal import (
+    ElevationConfirmationScreen,
+    PreviewOutputScreen,
+    TextScreen,
+)
 from .screens.queue import QueueApplyConfirmationScreen, QueueScreen
 
 
@@ -92,6 +96,7 @@ class KerntopApp(App[None]):
         ("d", "remove_selected", "Remove"),
         ("c", "view_queue", "Queue"),
         ("u", "header_cleanup", "Header cleanup"),
+        ("e", "elevate", "Elevate"),
         ("escape", "back_to_series", "Back / quit"),
         Binding("left", "return_to_series", show=False),
     ]
@@ -109,6 +114,7 @@ class KerntopApp(App[None]):
         self.queued_actions: tuple[QueuedAction, ...] = ()
         self.unused_header_packages: tuple[PackageState, ...] = ()
         self.unused_kernel_support_packages: tuple[PackageState, ...] = ()
+        self.elevate_on_exit = False
 
     @property
     def is_root(self) -> bool:
@@ -130,7 +136,7 @@ class KerntopApp(App[None]):
             mode.add_class("root")
         else:
             mode.update(
-                "Read-only mode: run kerntop with sudo to enable package actions."
+                "Read-only mode: press e to restart kerntop with sudo for package actions."
             )
             mode.add_class("read-only")
         self.action_reload()
@@ -141,6 +147,18 @@ class KerntopApp(App[None]):
     def action_interrupt_quit(self) -> None:
         """Exit immediately when the terminal sends an interrupt."""
         self.exit()
+
+    def action_elevate(self) -> None:
+        """Offer a clean restart through sudo for package-management actions."""
+        if self.is_root:
+            return
+        self.push_screen(ElevationConfirmationScreen(), self.handle_elevation)
+
+    def handle_elevation(self, should_elevate: bool | None) -> None:
+        """Exit normally so sudo can prompt using the restored terminal."""
+        if should_elevate:
+            self.elevate_on_exit = True
+            self.exit()
 
     async def load_state(self) -> None:
         summary = self.query_one("#summary", Static)
@@ -263,7 +281,9 @@ class KerntopApp(App[None]):
     def check_action(self, action: str, parameters: tuple[t.Any, ...]) -> bool | None:
         """Expose navigation and package actions only in their relevant view."""
         record = self.selected_record()
-        if action == "preview_install_selected":
+        if action == "elevate":
+            return not self.is_root
+        elif action == "preview_install_selected":
             return self.is_root and record is not None and not record.installed
         elif action == "preview_remove_selected":
             return (
@@ -728,6 +748,7 @@ class KerntopApp(App[None]):
                 "d: remove an installed non-running image\n"
                 "c: review queued package actions\n"
                 "u: review unused development headers (main browser only)\n"
+                "e: restart kerntop with sudo\n"
                 "r: reload the local apt cache\n\n"
                 "Install and remove actions require root mode and run immediately. "
                 "Queued actions can be previewed before their final confirmation.",

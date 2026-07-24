@@ -10,8 +10,9 @@ package actions.
 
 > [!WARNING]
 > `kerntop` 0.0.8 is an early release. It can run real `apt-get` transactions
-> when started as root. Read the confirmation dialog and preview a transaction
-> before applying it.
+> when started as root; from a read-only session, press `e` to restart through
+> `sudo`. Read the confirmation dialog and preview a transaction before
+> applying it.
 
 ## Install
 
@@ -59,6 +60,10 @@ Start with package-action controls enabled:
 $ sudo kerntop
 ```
 
+From an unprivileged session, press `e` to restart kerntop through `sudo`.
+The application closes before `sudo` prompts for your password, so the normal
+terminal authentication flow works over local terminals and SSH sessions.
+
 Use the arrow keys and Enter to browse kernel series and builds. Press `h` in
 the application for the complete key reference. The primary actions are:
 
@@ -68,6 +73,7 @@ the application for the complete key reference. The primary actions are:
 - `i` installs an available kernel image after confirmation.
 - `d` removes an installed, non-running kernel image after confirmation.
 - `u` reviews unused versioned headers and kernel-support packages.
+- `e` restarts kerntop with `sudo` from a read-only session.
 
 ## Safety model
 

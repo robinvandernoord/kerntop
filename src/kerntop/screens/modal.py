@@ -5,7 +5,7 @@ import typing as t
 from textual.app import ComposeResult
 from textual.containers import Container, VerticalScroll
 from textual.screen import ModalScreen
-from textual.widgets import Log, Static
+from textual.widgets import Log, OptionList, Static
 
 
 class TextScreen(ModalScreen[None]):
@@ -27,6 +27,35 @@ class TextScreen(ModalScreen[None]):
 
     def action_close(self) -> None:
         self.dismiss()
+
+
+class ElevationConfirmationScreen(ModalScreen[bool]):
+    """Confirm restarting the application with administrator privileges."""
+
+    BINDINGS = [("escape", "cancel", "Cancel"), ("q", "cancel", "Cancel")]
+
+    def compose(self) -> ComposeResult:
+        with Container(id="action-dialog"):
+            yield Static("Restart with administrator privileges?", id="dialog-title")
+            yield Static(
+                "kerntop will exit, then sudo will prompt for your password in "
+                "this terminal before restarting the application. Any queued "
+                "changes will be discarded."
+            )
+            yield OptionList("Cancel", "Restart with sudo", id="elevation-confirmation")
+            yield Static(
+                "Arrow keys choose an action; Enter confirms.", id="dialog-help"
+            )
+
+    def on_mount(self) -> None:
+        self.query_one(OptionList).focus()
+
+    def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
+        if event.option_list.id == "elevation-confirmation":
+            self.dismiss(event.option_index == 1)
+
+    def action_cancel(self) -> None:
+        self.dismiss(False)
 
 
 class PreviewOutputScreen(ModalScreen[None]):
