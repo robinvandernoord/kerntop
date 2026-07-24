@@ -7,7 +7,7 @@ import typing as t
 from textual import events
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.widgets import DataTable, Footer, Header, Static
+from textual.widgets import DataTable, Footer, Header, LoadingIndicator, Static
 
 from .apt_commands import (
     PreviewAction,
@@ -47,6 +47,11 @@ from .screens.modal import (
 from .screens.queue import QueueApplyConfirmationScreen, QueueScreen
 
 
+def pluralize(word: str, count: int, plural: str | None = None) -> str:
+    """Return word's plural form when count is not one."""
+    return word if count == 1 else plural or f"{word}s"
+
+
 class KerntopApp(App[None]):
     """Kernel discovery with root-only apt previews and package actions."""
 
@@ -55,6 +60,8 @@ class KerntopApp(App[None]):
     #mode { padding: 0 1; background: $surface; }
     #mode.root { color: $success; }
     #mode.read-only { color: $warning; }
+    #loading { display: none; height: 1; width: 5; margin-left: 1; }
+    #loading.visible { display: block; }
     #summary { padding: 0 1; }
     DataTable { height: 1fr; }
     DataTable > .datatable--cursor { text-style: none; }
@@ -126,6 +133,7 @@ class KerntopApp(App[None]):
     def compose(self) -> ComposeResult:
         yield Header()
         yield Static(id="mode")
+        yield LoadingIndicator(id="loading")
         yield Static(id="summary")
         yield DataTable(cursor_type="row")
         yield Footer()
@@ -222,6 +230,8 @@ class KerntopApp(App[None]):
 
     async def load_state(self) -> None:
         summary = self.query_one("#summary", Static)
+        loading = self.query_one("#loading", LoadingIndicator)
+        loading.add_class("visible")
         summary.update("Loading the local apt cache…")
         try:
             state = await asyncio.to_thread(
@@ -240,6 +250,8 @@ class KerntopApp(App[None]):
             self.unused_kernel_support_packages = ()
             self.render_error(f"Unable to read the apt cache: {error}")
             return
+        finally:
+            loading.remove_class("visible")
         self.render_state(state)
 
     def render_error(self, message: str) -> None:
@@ -332,7 +344,8 @@ class KerntopApp(App[None]):
                 record.identifier, status, installed, candidate, headers or "—"
             )
         self.query_one("#summary", Static).update(
-            f"Kernel series {series.name}: {len(series.records)} build(s); "
+            f"Kernel series {series.name}: {len(series.records)} "
+            f"{pluralize('build', len(series.records))}; "
             f"showing {'all variants' if self.show_all_variants else 'recommended variants'}. "
             f"Press Enter for actions.{self.fallback_warning()}"
         )
