@@ -4,6 +4,7 @@ import asyncio
 import os
 import typing as t
 
+from textual import events
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.widgets import DataTable, Footer, Header, Static
@@ -110,6 +111,7 @@ class KerntopApp(App[None]):
         self.native_architecture = ""
         self.running_release = ""
         self.escape_pending = False
+        self.vim_quit_pending = False
         self.show_all_variants = False
         self.queued_actions: tuple[QueuedAction, ...] = ()
         self.unused_header_packages: tuple[PackageState, ...] = ()
@@ -147,6 +149,26 @@ class KerntopApp(App[None]):
     def action_interrupt_quit(self) -> None:
         """Exit immediately when the terminal sends an interrupt."""
         self.exit()
+
+    def on_key(self, event: events.Key) -> None:
+        """Exit on Vim's hidden :q shortcut without taking over q."""
+        if self.vim_quit_pending:
+            if event.key == "q":
+                event.prevent_default()
+                event.stop()
+                self.exit_vim_quit()
+            else:
+                self.vim_quit_pending = False
+        elif event.character == ":":
+            self.vim_quit_pending = True
+
+    def exit_vim_quit(self) -> bool:
+        """Exit when a Vim quit prefix is waiting to be completed."""
+        if not self.vim_quit_pending:
+            return False
+        self.vim_quit_pending = False
+        self.exit()
+        return True
 
     def action_elevate(self) -> None:
         """Offer a clean restart through sudo for package-management actions."""
@@ -425,7 +447,8 @@ class KerntopApp(App[None]):
 
     def action_queue_install_selected(self) -> None:
         """Queue installation of the highlighted available image."""
-        self.queue_action(PreviewAction.INSTALL)
+        if not self.exit_vim_quit():
+            self.queue_action(PreviewAction.INSTALL)
 
     def action_remove_selected(self) -> None:
         """Confirm removal of the highlighted installed image."""
@@ -433,7 +456,8 @@ class KerntopApp(App[None]):
 
     def action_queue_remove_selected(self) -> None:
         """Queue removal of the highlighted installed image."""
-        self.queue_action(PreviewAction.REMOVE)
+        if not self.exit_vim_quit():
+            self.queue_action(PreviewAction.REMOVE)
 
     def queue_action(self, action: PreviewAction) -> None:
         """Stage the selected safe package action without changing the host."""
