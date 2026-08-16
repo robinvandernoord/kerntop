@@ -2,6 +2,11 @@
 
 <!-- next-version-placeholder -->
 
+## v0.2.0 (2026-08-16)
+
+### Features
+* cli flags to start in specific modes (-e, -u)
+
 ## 0.1.2 (2026-07-24)
 
 ### Fixes
