@@ -1,5 +1,7 @@
 # Changelog
 
+<!-- next-version-placeholder -->
+
 ## 0.1.2 (2026-07-24)
 
 ### Fixes
