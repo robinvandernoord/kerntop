@@ -66,6 +66,15 @@ From an unprivileged session, press `e` to restart kerntop through `sudo`.
 The application closes before `sudo` prompts for your password, so the normal
 terminal authentication flow works over local terminals and SSH sessions.
 
+The same entry points are available as command line flags, which may be
+combined (`kerntop -eu`):
+
+- `-e`, `--elevate` restarts through `sudo` before the interface starts, so the
+  session begins in root mode.
+- `-u`, `--header-cleanup` opens the header cleanup review as soon as the apt
+  cache has loaded.
+- `-h`, `--help` starts the interface on its Help screen.
+
 Use the arrow keys and Enter to browse kernel series and builds. Press `h` in
 the application for the complete key reference. The primary actions are:
 

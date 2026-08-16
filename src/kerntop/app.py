@@ -113,9 +113,14 @@ class KerntopApp(App[None]):
         Binding("left", "return_to_series", show=False),
     ]
 
-    def __init__(self, show_help_on_start: bool = False) -> None:
+    def __init__(
+        self,
+        show_help_on_start: bool = False,
+        show_header_cleanup_on_start: bool = False,
+    ) -> None:
         super().__init__()
         self.show_help_on_start = show_help_on_start
+        self.show_header_cleanup_on_start = show_header_cleanup_on_start
         self.records: tuple[KernelRecord, ...] = ()
         self.packages: tuple[PackageState, ...] = ()
         self.series: tuple[KernelSeries, ...] = ()
@@ -261,6 +266,7 @@ class KerntopApp(App[None]):
         self.render_state(state)
 
     def render_error(self, message: str) -> None:
+        self.show_header_cleanup_on_start = False
         table = self.query_one(DataTable)
         table.clear(columns=True)
         self.query_one("#summary", Static).update(message)
@@ -278,6 +284,9 @@ class KerntopApp(App[None]):
         )
         self.refresh_records()
         self.render_series()
+        if self.show_header_cleanup_on_start:
+            self.show_header_cleanup_on_start = False
+            self.action_header_cleanup()
 
     def refresh_records(self) -> None:
         """Rebuild the displayed records from the cached kernel package state."""
@@ -868,6 +877,9 @@ class KerntopApp(App[None]):
                 "r: refresh apt repositories and reload the cache in root mode; "
                 "reload the local cache otherwise\n\n"
                 "Install and remove actions require root mode and run immediately. "
-                "Queued actions can be previewed before their final confirmation.",
+                "Queued actions can be previewed before their final confirmation.\n\n"
+                "Command line: -e restarts through sudo right away, "
+                "-u opens the header cleanup review once the cache loads, "
+                "-h opens this screen.",
             )
         )
